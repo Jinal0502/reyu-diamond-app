@@ -1,0 +1,13 @@
+{
+  "name": "reyu-diamond-app",
+  "private": true,
+  "scripts": {
+    "client": "npm start --prefix client",
+    "server": "npm run dev --prefix server",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "start": "npm run server"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}
