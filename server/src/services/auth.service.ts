@@ -2,6 +2,7 @@ import { User } from "../models/User.model";
 import crypto from "crypto";
 import { sendEmail } from "../services/email.service";
 import { otpEmailTemplate } from "../utils/email.template";
+import { setUserOtp } from "../utils/otp.utils";
 
 interface LoginResult {
   _id: string;
@@ -9,12 +10,8 @@ interface LoginResult {
   email: string;
   role: string;
   isKycVerified: boolean;
+  isEmailVerified: boolean;
 }
-
-const generateOTP = (): string => {
-  return crypto.randomInt(100000, 999999).toString();
-};
-
 
 export const registerUser = async (
   name: string,
@@ -29,13 +26,7 @@ export const registerUser = async (
 
   const user = await User.create({ name, email, password });
 
-
-  const otp = generateOTP();
-  user.otp = otp;
-  user.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-
-  await user.save();
+  const otp = await setUserOtp(user , 10);
 
   await sendEmail({
       to: email,
@@ -43,10 +34,9 @@ export const registerUser = async (
       htmlContent: otpEmailTemplate(otp),
     });
   
-
   return { email: user.email, message: "OTP sent to email" };
-};
 
+};
 
 export const verifyEmailOtp = async (email: string, otp: string) => {
 
@@ -76,6 +66,24 @@ export const verifyEmailOtp = async (email: string, otp: string) => {
   return { email: user.email, message: "Email verified successfully" };
 };
 
+export const resentEmailOtp = async (email: string) => {
+
+  const user = await User.findOne({ email });
+
+  if (!user) throw new Error("User Not Found");
+
+  const otp = await setUserOtp(user , 10);
+
+  await sendEmail({
+    to: email,
+    subject: "Verify your email",
+    htmlContent: otpEmailTemplate(otp),
+  }); 
+
+  return { email: user.email, message: "OTP resent to email" };
+};
+
+
 export const loginUser = async (email: string, password: string): Promise<LoginResult> => {
 
   const user = await User.findOne({ email }).select("+password");
@@ -86,13 +94,26 @@ export const loginUser = async (email: string, password: string): Promise<LoginR
 
   if (!isMatch) throw new Error("Invalid Password");
 
+  if (!user.isEmailVerified) {
+
+    const otp = await setUserOtp(user , 10);
+    
+    await sendEmail({
+      to: user.email,
+      subject: "Verify your email",
+      htmlContent: otpEmailTemplate(otp),
+    });
+
+    throw new Error("EMAIL_NOT_VERIFIED");
+
+  }
+
   return {
     _id: user._id.toString(),
     name: user.name,
     email: user.email,
     role: user.role,
     isKycVerified: user.isKycVerified,
+    isEmailVerified: user.isEmailVerified,
   };
 };
-
-

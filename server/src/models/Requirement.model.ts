@@ -29,6 +29,7 @@ export interface IRequirement {
     certificate?: string[];
     notes?: string;
   };
+  status?: "active" | "close" | "expired";
 }
 
 const RequirementSchema = new Schema<IRequirement>(
@@ -66,6 +67,11 @@ const RequirementSchema = new Schema<IRequirement>(
       certificate: [String],
       notes: String,
     },
+    status: {
+    type: String,
+    enum: ["active", "close", "expired"],
+    default: "active",
+},
   },
   { timestamps: true }
 );

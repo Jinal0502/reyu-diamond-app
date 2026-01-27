@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import * as UserService from "../services/user.service";
 import { sendResponse } from "../utils/api.response";
 
-export const getProfile = async (req: any, res: Response) => {
+export const getProfile = async (req: any, res: Response , next : any) => {
   try {
     const user = await UserService.getUserProfile(req.user._id);
 
@@ -18,17 +18,11 @@ export const getProfile = async (req: any, res: Response) => {
       return sendResponse(res, 404, false, "User not found");
     }
 
-    return sendResponse(
-      res,
-      500,
-      false,
-      "Failed to fetch profile",
-      err.message
-    );
+    next(err);
   }
 };
 
-export const updateProfile = async (req: any, res: Response) => {
+export const updateProfile = async (req: any, res: Response ,next : any) => {
   try {
     const { name } = req.body;
 
@@ -48,12 +42,6 @@ export const updateProfile = async (req: any, res: Response) => {
       return sendResponse(res, 404, false, "User not found");
     }
 
-    return sendResponse(
-      res,
-      500,
-      false,
-      "Failed to update profile",
-      err.message
-    );
+     next(err);
   }
 };

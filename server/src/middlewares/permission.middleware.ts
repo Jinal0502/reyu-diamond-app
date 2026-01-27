@@ -1,35 +1,58 @@
-import { Response, NextFunction, Request } from "express";
+import { Request, Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import { sendResponse } from "../utils/api.response";
 
-// Define the middleware type with ownerOrRole
-type PermitMiddleware = ((req: Request, res: Response, next: NextFunction) => void) & {
-  ownerOrRole: (getOwnerId: (req: Request) => string) => (req: Request, res: Response, next: NextFunction) => void;
-};
-
-export const permit = (...roles: string[]): PermitMiddleware => {
-  const middleware = (req: any, res: Response, next: NextFunction) => {
-    if (!roles.includes(req.userRole)) {
+export const permit =
+  (...roles: string[]) =>
+  (req: any, res: Response, next: NextFunction) => {
+    if (!req.userRole || !roles.includes(req.userRole)) {
       return sendResponse(res, 403, false, "Access Denied");
     }
     next();
   };
 
-  // Add ownerOrRole method
-  middleware.ownerOrRole = (getOwnerId: (req: Request) => string) => {
-    return (req: any, res: Response, next: NextFunction) => {
-      // If user has one of the roles, allow
-      if (roles.includes(req.userRole)) {
+export const ownerOrRole = (
+  model: mongoose.Model<any>,
+  ownerField: string = "userId",
+  allowedRoles: string[] = ["admin"],
+  paramKey: string = "id"
+) => {
+  return async (req: any, res: Response, next: NextFunction) => {
+    try {
+      // Role bypass
+      if (req.userRole && allowedRoles.includes(req.userRole)) {
         return next();
       }
 
-      // If user is owner, allow
-      if (req.userId && req.userId.toString() === getOwnerId(req)) {
-        return next();
+      const resourceId = req.params?.[paramKey];
+
+      if (!resourceId || !mongoose.Types.ObjectId.isValid(resourceId)) {
+        return sendResponse(res, 400, false, "Invalid resource identifier");
+      }
+      
+      const resource = await model
+        .findById(resourceId)
+        .select(ownerField);
+        
+      if (!resource) {
+        return sendResponse(res, 404, false, "Resource not found");
       }
 
-      return sendResponse(res, 403, false, "Access Denied");
-    };
+      if (!resource[ownerField]) {
+        return sendResponse(res, 403, false, "Ownership not defined");
+      }
+
+      if (resource[ownerField].toString() !== req.user._id.toString()) {
+        return sendResponse(res, 403, false, "Access Denied");
+      }
+
+      // Attach resource if controller needs it
+      req.resource = resource;
+
+      next();
+    } catch (error) {
+      console.error("Authorization error:", error);
+      return sendResponse(res, 500, false, "Authorization failed");
+    }
   };
-
-  return middleware;
 };

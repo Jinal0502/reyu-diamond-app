@@ -2,8 +2,9 @@ import { Request, Response } from "express";
 import * as AuthService from "../services/auth.service";
 import { sendResponse } from "../utils/api.response";
 import { generateToken } from "../utils/generate.token";
+import isEmail from "validator/lib/isEmail";
 
-export const register = async (req: Request, res: Response) => {
+export const register = async (req: Request, res: Response , next : any) => {
   try {
     const { name, email, password } = req.body;
 
@@ -26,33 +27,43 @@ export const register = async (req: Request, res: Response) => {
       );
     }
 
-    return sendResponse(
-      res,
-      500,
-      false,
-      "Internal server error",
-      err.message
-    );
+    next(err);
   }
 };
 
-export const verifyEmail = async(req : Request , res : Response) => {
+export const verifyEmail = async(req : Request , res : Response , next : any) => {
 
     try {
 
         const {email , otp} = req.body;
-        console.log(email , otp);
+
         const data = await AuthService.verifyEmailOtp(email , otp);
 
         return sendResponse(res , 200 , true , "Email verified successfully" , data );
     }
     catch(err : any){
 
-        return sendResponse(res , 400 , false , err.message || "OTP verification failed"  );
+        next(err)
     }
 }
 
-export const login = async(req : Request , res : Response) => {
+export const resendOtp = async(req : Request , res : Response , next : any) => {
+
+    try {
+
+        const { email } = req.body;
+
+        const data = await AuthService.resentEmailOtp(email);
+
+        return sendResponse(res , 200 , true , "OTP resent to email" , data );
+    }
+    catch(err : any){
+
+        next(err)
+    }
+}
+
+export const login = async(req : Request , res : Response , next : any) => {
 
     try {
 
@@ -69,8 +80,12 @@ export const login = async(req : Request , res : Response) => {
     }
 
     catch(err : any){
+
+        if(err.message === "EMAIL_NOT_VERIFIED"){
+          return sendResponse(res, 400, false, "Email is not verified. OTP sent to email" , { isEmailVerified : false } );
+        }
         
-        return sendResponse(res , 401 , false , err.message || "Invalid credentials"  );
+        next(err);
 
     }
 }

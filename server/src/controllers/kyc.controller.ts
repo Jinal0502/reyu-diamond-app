@@ -1,72 +1,102 @@
 import * as KycService from "../services/kyc.service";
 import { sendEmail } from "../services/email.service";
 import multer from "multer";
+import { sendResponse } from "../utils/api.response";
 
-export const submitKyc = async (req: any, res: any) => {
+export const submitKyc = async (req: any, res: any, next: any) => {
   try {
     const files = req.files;
-    if (!files || !files.aadhaar || !files.pan || !files.selfie) {
-      return res.status(400).json({ message: "All documents required" });
+    const { aadhaarNo, panNo, fullName } = req.body;
+
+    if (!aadhaarNo || !panNo) {
+      return sendResponse(res, 400, false, "Aadhaar & PAN numbers are required");
+    }
+
+    if (!files?.aadhaar || !files?.pan || !files?.selfie) {
+      return sendResponse(res, 400, false, "All documents are required");
     }
 
     const documents = {
-      aadhaar: { url: files.aadhaar[0].path, publicId: files.aadhaar[0].filename },
-      pan: { url: files.pan[0].path, publicId: files.pan[0].filename },
-      selfie: { url: files.selfie[0].path, publicId: files.selfie[0].filename },
+      aadhaar: {
+        url: files.aadhaar[0].path,
+        publicId: files.aadhaar[0].filename,
+      },
+      pan: {
+        url: files.pan[0].path,
+        publicId: files.pan[0].filename,
+      },
+      selfie: {
+        url: files.selfie[0].path,
+        publicId: files.selfie[0].filename,
+      },
     };
 
-    const kyc = await KycService.submitKyc(req.user._id, req.body.fullName, documents);
+    const kyc = await KycService.submitKyc(
+      req.user._id,
+      fullName,
+      aadhaarNo,
+      panNo,
+      documents
+    );
 
     await sendEmail({
       to: process.env.ADMIN_EMAIL!,
       subject: "New KYC Submitted",
-      htmlContent: `<p>User ${req.user.email} submitted KYC.</p>`,});
+      htmlContent: `<p>User ${req.user.email} submitted KYC.</p>`,
+    });
 
-    res.json({ success: true, message: "KYC submitted successfully", data: kyc, uploadedFiles: documents });
-  } catch (err: any) {
-    
+    return sendResponse(res, 200, true, "KYC submitted successfully");
+  } catch (err) {
     if (err instanceof multer.MulterError) {
-      
-      return res.status(400).json({ success: false, message: err.message });
+      return sendResponse(res, 400, false, err.message);
     }
-    res.status(500).json({ success: false, message: err.message });
+    next(err);
   }
 };
-
-export const approveKyc = async (req: any, res: any) => {
+export const verifyKyc = async (req: any, res: any, next: any) => {
   try {
-    const kyc = await KycService.approveKyc(req.params.id, req.user._id);
+    const { decision, reason } = req.body;
+
+    if (!["approved", "rejected"].includes(decision)) {
+      return sendResponse(res, 400, false, "Invalid decision");
+    }
+
+    const kyc = await KycService.verifyKyc(
+      req.params.id,
+      req.user._id,
+      decision,
+      reason
+    );
+
     await sendEmail({
       to: kyc.userId.email,
-      subject: "KYC Approved",
-      htmlContent: "Your KYC is approved. You can now buy & sell.",
+      subject: decision === "approved" ? "KYC Approved" : "KYC Rejected",
+      htmlContent:
+        decision === "approved"
+          ? "Your KYC is approved. You can now buy & sell."
+          : `Your KYC was rejected. Reason: ${reason}`,
     });
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message });
+
+    return sendResponse(res, 200, true, `KYC ${decision}`);
+  } catch (err) {
+    next(err);
   }
 };
 
-export const rejectKyc = async (req: any, res: any) => {
-  try {
-    const kyc = await KycService.rejectKyc(req.params.id, req.user._id, req.body.reason);
-    await sendEmail({
-      to: kyc.userId.email,
-      subject: "KYC Rejected",
-      htmlContent: `Reason: ${req.body.reason}`,
-    });
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
-
-export const getKycs = async (req: any, res: any) => {
+export const getKycs = async (req: any, res: any, next: any) => {
   try {
     const { page = 1, limit = 10, status } = req.query;
-    const result = await KycService.getKycs(Number(page), Number(limit), status);
-    res.json({ success: true, ...result });
-  } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message });
+
+    const result = await KycService.getKycs(
+      Number(page),
+      Number(limit),
+      status
+    );
+
+    return sendResponse(res, 200, true, "KYC list retrieved", result);
+  } catch (err) {
+    next(err);
   }
 };
+
+

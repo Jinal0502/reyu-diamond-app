@@ -1,42 +1,36 @@
 import { Router } from "express";
 import * as RequirementController from "../controllers/requirement.controller";
-import { protect } from "../middlewares/auth.middleware";
-import { permit } from "../middlewares/permission.middleware";
+import { ownerOrRole} from "../middlewares/permission.middleware";
+import { Requirement } from "../models/Requirement.model";
 
 const router = Router();
 
-const getParamId = (id: string | string[]) => (Array.isArray(id) ? id[0] : id);
-
-router.post(
-  "/",
-  protect,
-  RequirementController.createRequirement
-);
-
 router.get(
   "/",
-  protect,
-  RequirementController.getActiveRequirements
+  RequirementController.getRequirements
 );
 
 router.get(
   "/:id",
-  protect,
+  ownerOrRole(Requirement),
   RequirementController.getRequirementById
+);
+router.post(
+  "/",
+  RequirementController.createRequirement
 );
 
 router.put(
   "/:id",
-  protect,
-  permit("admin").ownerOrRole(req => getParamId(req.params.id)), 
+  ownerOrRole(Requirement, "userId", ["admin"]),
   RequirementController.updateRequirement
 );
 
 
 router.delete(
   "/:id",
-  protect,
-  permit("admin").ownerOrRole(req => getParamId(req.params.id)), 
+  ownerOrRole(Requirement, "userId", ["admin"]), 
+  
   RequirementController.deleteRequirement
 );
 

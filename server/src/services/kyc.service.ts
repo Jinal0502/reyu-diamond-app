@@ -1,7 +1,8 @@
 import mongoose, { Types } from "mongoose";
 import { KYC } from "../models/Kyc.model";
 import { User } from "../models/User.model";
-import  {deleteKycFiles} from "../utils/cloundinary.delete"
+import  {deleteKycFiles} from "../utils/cloundinary.delete";
+import crypto from "crypto";
 
 interface IUserPopulated {
   _id: Types.ObjectId;
@@ -9,24 +10,49 @@ interface IUserPopulated {
   name?: string;
 }
 
+const hashValue = (value: string) =>
+  crypto.createHash("sha256").update(value).digest("hex");
+
 export const submitKyc = async (
   userId: string,
-  fullName: string,
-  documents: { aadhaar: { url: string; publicId: string }; pan: { url: string; publicId: string }; selfie: { url: string; publicId: string } }
+  name: string,
+  aadhaarNo: string,
+  panNo: string,
+  documents: {
+    aadhaar: { url: string; publicId: string };
+    pan: { url: string; publicId: string };
+    selfie: { url: string; publicId: string };
+  }
 ) => {
   const userObjectId = new mongoose.Types.ObjectId(userId);
+
   const existing = await KYC.findOne({ userId: userObjectId });
 
-  if (existing?.status === "approved") throw new Error("KYC already approved");
+  if (existing?.status === "approved") {
+    throw new Error("KYC already approved");
+  }
 
-  
-  if (existing) await deleteKycFiles(userId);
+  if (existing) {
+    await deleteKycFiles(userId);
+  }
 
   return KYC.findOneAndUpdate(
     { userId: userObjectId },
     {
-      name: fullName,
-      documents,
+      name,
+      documents: {
+        aadhaar: {
+          aadhaarHash: hashValue(aadhaarNo),
+          aadhaarLast4: aadhaarNo.slice(-4),
+          ...documents.aadhaar,
+        },
+        pan: {
+          panHash: hashValue(panNo),
+          panLast4: panNo.slice(-4),
+          ...documents.pan,
+        },
+        selfie: documents.selfie,
+      },
       status: "pending",
       rejectionReason: undefined,
       verifiedBy: undefined,
@@ -35,35 +61,37 @@ export const submitKyc = async (
     { upsert: true, new: true }
   );
 };
+type KycDecision = "approved" | "rejected";
 
-export const approveKyc = async (kycId: string, adminId: string) => {
-  const kyc = await KYC.findById(kycId).populate<{ userId: IUserPopulated }>("userId");
+export const verifyKyc = async (
+  kycId: string,
+  adminId: string,
+  decision: KycDecision,
+  reason?: string
+) => {
+  if (decision === "rejected" && !reason) {
+    throw new Error("Rejection reason is required");
+  }
+
+  const kyc = await KYC.findById(kycId)
+    .populate<{ userId: IUserPopulated }>("userId");
+
   if (!kyc) throw new Error("KYC not found");
 
-  kyc.status = "approved";
+  if (kyc.status === "approved") {
+  throw new Error("KYC already approved");
+}
+
+  kyc.status = decision;
   kyc.verifiedBy = new mongoose.Types.ObjectId(adminId);
   kyc.verifiedAt = new Date();
-  kyc.rejectionReason = undefined;
+  kyc.rejectionReason = decision === "rejected" ? reason : undefined;
 
   await kyc.save();
-  await User.findByIdAndUpdate(kyc.userId._id, { isKycVerified: true });
 
-  return kyc;
-};
-
-export const rejectKyc = async (kycId: string, adminId: string, reason: string) => {
-  if (!reason) throw new Error("Reason required");
-
-  const kyc = await KYC.findById(kycId).populate<{ userId: IUserPopulated }>("userId");
-  if (!kyc) throw new Error("KYC not found");
-
-  kyc.status = "rejected";
-  kyc.rejectionReason = reason;
-  kyc.verifiedBy = new mongoose.Types.ObjectId(adminId);
-  kyc.verifiedAt = new Date();
-
-  await kyc.save();
-  await User.findByIdAndUpdate(kyc.userId._id, { isKycVerified: false });
+  await User.findByIdAndUpdate(kyc.userId._id, {
+    isKycVerified: decision === "approved",
+  });
 
   return kyc;
 };
