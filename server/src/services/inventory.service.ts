@@ -13,13 +13,17 @@ export const createInventory = async (
 
 export const updateInventory = async (
   inventoryId: string,
-  sellerId: Types.ObjectId,
   updates: Partial<IInventory>
 ) => {
+
+  const inventory = await Inventory.findById(inventoryId);
+  console.log("Inventory found for update:", inventory);
+  if (!inventory) {
+    throw new Error("Inventory not found");
+  }
   return Inventory.findOneAndUpdate(
     {
       _id: inventoryId,
-      sellerId,
       locked: false,
     },
     updates,
@@ -29,11 +33,9 @@ export const updateInventory = async (
 
 export const deleteInventory = async (
   inventoryId: string,
-  sellerId: Types.ObjectId
 ) => {
   return Inventory.findOneAndDelete({
     _id: inventoryId,
-    sellerId,
     locked: false,
   });
 };
@@ -43,9 +45,9 @@ export const getInventory = async () => {
 };
 
 export const getInventoryByIdOrBarcode = async (
-  id: string
+  inventoryId: string
 ) => {
   return Inventory.findOne({
-    $or: [{ _id: id }, { barcode: id }],
+    $or: [{ _id: inventoryId }, { barcode: inventoryId }],
   });
 };

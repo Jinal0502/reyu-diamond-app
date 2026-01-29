@@ -62,7 +62,7 @@ export const verifyKyc = async (req: any, res: any, next: any) => {
     }
 
     const kyc = await KycService.verifyKyc(
-      req.params.id,
+      req.params.kycId,
       req.user._id,
       decision,
       reason

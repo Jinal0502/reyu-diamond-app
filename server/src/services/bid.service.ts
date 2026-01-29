@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 import { Inventory } from "../models/Inventory.model";
 import { Bid } from "../models/Bid.model";
 
-
 export type BidAction = "ACCEPT" | "REJECT" | "EXPIRE";
 
 interface CreateBidInput {
@@ -10,7 +9,6 @@ interface CreateBidInput {
   buyerId: string;
   bidAmount: number;
 }
-
 
 export const createBidService = async ({
   inventoryId,
@@ -56,42 +54,41 @@ export const createBidService = async ({
       throw new Error("You already have the highest bid");
     }
 
-    // 4. Create new bid
-    const bid = await Bid.create(
+    // 4. Demote previous highest bid FIRST (atomic)
+    if (currentHighestBid) {
+      await Bid.updateOne(
+        { _id: currentHighestBid._id },
+        { $set: { isHighestBid: false } },
+        { session }
+      );
+    }
+
+    // 5. Create new bid as highest bid
+    const [bid] = await Bid.create(
       [
         {
           inventoryId,
           buyerId,
           bidAmount,
           status: "ACTIVE",
-          isHighestBid:
-            !currentHighestBid || bidAmount > currentHighestBid.bidAmount,
+          isHighestBid: true,
         },
       ],
       { session }
     );
 
-    // 5. Downgrade previous highest bid
-    if (
-      currentHighestBid &&
-      bidAmount > currentHighestBid.bidAmount
-    ) {
-      currentHighestBid.isHighestBid = false;
-      await currentHighestBid.save({ session });
-    }
-
     await session.commitTransaction();
     session.endSession();
 
-    return bid[0];
+    return bid;
   } catch (error: any) {
     await session.abortTransaction();
     session.endSession();
 
-    // Handle race condition (unique highest bid index)
+    // Handle unique index race
     if (error.code === 11000) {
       throw new Error(
-        "Another bid was placed at the same time. Please retry."
+        "Bid conflict detected. Another higher bid already exists. Please retry."
       );
     }
 
@@ -143,10 +140,7 @@ export const updateBidStatusService = async (
         bid.status = "ACCEPTED";
         bid.isHighestBid = false;
         await bid.save({ session });
-
-        // Lock inventory & finalize price
-        inventory.status = "on_memo";
-        inventory.locked = true;
+        // Update inventory status and price
         inventory.price = bid.bidAmount;
         await inventory.save({ session });
 
@@ -183,20 +177,20 @@ export const updateBidStatusService = async (
   }
 };
 
-
 export const getBidsByInventoryService = async (inventoryId: string) => {
   return Bid.find({ inventoryId })
     .populate("buyerId", "name email")
     .sort({ bidAmount: -1, createdAt: -1 });
 };
 
-
 export const getMyBidService = async (
   inventoryId: string,
   buyerId: string
 ) => {
-
-  if(!mongoose.Types.ObjectId.isValid(inventoryId) || !mongoose.Types.ObjectId.isValid(buyerId)){
+  if (
+    !mongoose.Types.ObjectId.isValid(inventoryId) ||
+    !mongoose.Types.ObjectId.isValid(buyerId)
+  ) {
     throw new Error("Invalid inventoryId or buyerId");
   }
 

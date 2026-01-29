@@ -36,12 +36,10 @@ export const updateInventoryItem = async (
   res: Response
 ) => {
   try {
-    const inventoryId = req.params.id as string;
+    const inventoryId = req.params.inventoryId as string;
 
-    const sellerId = req.user?._id as any;
     const updatedInventory = await InventoryService.updateInventory(
       inventoryId,
-      sellerId,
       req.body
     );
 
@@ -52,16 +50,6 @@ export const updateInventoryItem = async (
         false,
         "Inventory is locked",
         null
-      );
-    }
-    if (updatedInventory.locked) {
-      // Additional logic for unlocked inventory (if any)
-      return sendResponse(
-        res,
-        200,
-        true,
-        `Inventory item ${updatedInventory.locked ? "locked" : "updated"}`,
-        updatedInventory
       );
     }
 
@@ -89,12 +77,10 @@ export const deleteInventoryItem = async (
   res: Response
 ) => {
   try {
-    const inventoryId = req.params.id as string;
-    const sellerId = req.user?._id as any;
+    const inventoryId = req.params.inventoryId as string;
 
     const deletedInventory = await InventoryService.deleteInventory(
       inventoryId,
-      sellerId
     );
 
     if (!deletedInventory) {
@@ -156,10 +142,10 @@ export const getInventoryItem = async (
   res: Response
 ) => {
   try {
-    const id = req.params.id as string; // 👈 explicit cast (response #2)
+    const inventoryId = req.params.inventoryId as string; // 👈 explicit cast (response #2)
 
     const inventory =
-      await InventoryService.getInventoryByIdOrBarcode(id);
+      await InventoryService.getInventoryByIdOrBarcode(inventoryId);
 
     if (!inventory) {
       return sendResponse(res, 404, false, "Inventory not found", null);

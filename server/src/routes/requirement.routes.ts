@@ -2,6 +2,7 @@ import { Router } from "express";
 import * as RequirementController from "../controllers/requirement.controller";
 import { ownerOrRole} from "../middlewares/permission.middleware";
 import { Requirement } from "../models/Requirement.model";
+import { kycVerifiedOnly } from "../middlewares/kyc.middleware";
 
 const router = Router();
 
@@ -11,26 +12,28 @@ router.get(
 );
 
 router.get(
-  "/:id",
-  ownerOrRole(Requirement),
+  "/:requirementId",
+  ownerOrRole(Requirement , "userId"),
   RequirementController.getRequirementById
 );
 router.post(
   "/",
+  kycVerifiedOnly,
   RequirementController.createRequirement
 );
 
 router.put(
-  "/:id",
+  "/:requirementId",
+  kycVerifiedOnly,
   ownerOrRole(Requirement, "userId", ["admin"]),
   RequirementController.updateRequirement
 );
 
 
 router.delete(
-  "/:id",
+  "/:requirementId",
+  kycVerifiedOnly,
   ownerOrRole(Requirement, "userId", ["admin"]), 
-  
   RequirementController.deleteRequirement
 );
 

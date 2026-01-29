@@ -3,6 +3,7 @@ import * as InventoryController from "../controllers/inventory.controller";
 import { protect } from "../middlewares/auth.middleware";
 import { ownerOrRole} from "../middlewares/permission.middleware";
 import { Inventory } from "../models/Inventory.model";
+import { kycVerifiedOnly } from "../middlewares/kyc.middleware";
 
 const router = Router();
 
@@ -12,27 +13,30 @@ router.get(
 );
 
 router.get(
-  "/:id",
+  "/:inventoryId",
   InventoryController.getInventoryItem
 );
 
 router.post(
   "/",
   protect,
+  kycVerifiedOnly,
   InventoryController.createInventoryItem
 );
 
 router.put(
-  "/:id",
+  "/:inventoryId",
   protect,
-  ownerOrRole(Inventory , "sellerId" , ["admin"]),
+  kycVerifiedOnly,
+  ownerOrRole(Inventory , "sellerId" , ["admin"] , "inventoryId"),
   InventoryController.updateInventoryItem
 );
 
 router.delete(
-  "/:id",
+  "/:inventoryId",
   protect,
-  ownerOrRole(Inventory , "sellerId" , ["admin"]),
+  kycVerifiedOnly,
+  ownerOrRole(Inventory , "sellerId" , ["admin"] , "inventoryId"),
   InventoryController.deleteInventoryItem
 );
 

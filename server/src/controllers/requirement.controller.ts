@@ -36,9 +36,9 @@ export const getRequirements = async (req: Request, res: Response, next: NextFun
 
 export const getRequirementById = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const id = getParamId(req.params.id);
+    const requirementId = getParamId(req.params.requirementId);
 
-    const requirement = await RequirementService.getRequirementById(id);
+    const requirement = await RequirementService.getRequirementById(requirementId);
 
     if (!requirement) {
       return sendResponse(res, 404, false, "Requirement not found");
@@ -53,9 +53,9 @@ export const getRequirementById = async (req: Request, res: Response, next: Next
 
 export const updateRequirement = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const id = getParamId(req.params.id);
+    const requirementId = getParamId(req.params.requirementId);
     
-    const updated = await RequirementService.updateRequirement(id, req.body);
+    const updated = await RequirementService.updateRequirement(requirementId, req.body);
     
     return sendResponse(res, 200, true, "Requirement updated successfully", updated);
   } 
@@ -66,9 +66,9 @@ export const updateRequirement = async (req: Request, res: Response, next: NextF
 
 export const deleteRequirement = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const id = getParamId(req.params.id);
+    const requirementId = getParamId(req.params.requirementId);
     
-    await RequirementService.deleteRequirement(id);
+    await RequirementService.deleteRequirement(requirementId);
     
     return sendResponse(res, 200, true, "Requirement deleted successfully");
   } 

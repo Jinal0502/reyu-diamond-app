@@ -1,7 +1,7 @@
 import { User } from "../models/User.model";
 import crypto from "crypto";
 import { sendEmail } from "../services/email.service";
-import { otpEmailTemplate } from "../utils/email.template";
+import { otpEmailTemplate } from "../utils/templates/email.template";
 import { setUserOtp } from "../utils/otp.utils";
 
 interface LoginResult {
