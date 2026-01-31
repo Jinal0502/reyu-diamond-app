@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import * as AuthService from "../services/auth.service";
 import { sendResponse } from "../utils/api.response";
 import { generateToken } from "../utils/generate.token";
@@ -87,6 +87,32 @@ export const login = async(req : Request , res : Response , next : any) => {
         
         next(err);
 
+    }
+}
+
+export const forgotPassword = async(req : Request , res : Response , next : NextFunction) => {
+    try {
+        const { email } = req.body;
+
+        const data = await AuthService.forgotPassword(email);
+
+        return sendResponse(res , 200 , true , "OTP sent to email" , data );
+    }
+    catch(err : any){
+        next(err);
+    }
+}
+
+export const resetPassword = async(req : Request , res : Response , next : NextFunction) => {
+    try {
+        const { email , otp , newPassword} = req.body;
+
+        const data = await AuthService.resetPasswordWithOtp(email , otp , newPassword);
+
+        return sendResponse(res , 200 , true , "Password reset successful" , data );
+    }
+    catch(err : any){
+        next(err);
     }
 }
 

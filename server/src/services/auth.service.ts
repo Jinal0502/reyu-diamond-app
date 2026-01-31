@@ -1,5 +1,4 @@
 import { User } from "../models/User.model";
-import crypto from "crypto";
 import { sendEmail } from "../services/email.service";
 import { otpEmailTemplate } from "../utils/templates/email.template";
 import { setUserOtp } from "../utils/otp.utils";
@@ -26,7 +25,7 @@ export const registerUser = async (
 
   const user = await User.create({ name, email, password });
 
-  const otp = await setUserOtp(user , 10);
+  const otp = await setUserOtp(user , 10 , "EMAIL_VERIFY");
 
   await sendEmail({
       to: email,
@@ -40,11 +39,11 @@ export const registerUser = async (
 
 export const verifyEmailOtp = async (email: string, otp: string) => {
 
-  const user = await User.findOne({ email }).select("+otp +otpExpiresAt");
+  const user = await User.findOne({ email }).select("+otp +otpExpiresAt +otpPurpose");
   
   if (!user) throw new Error("User Not Found");
 
-  if (!user.otp || !user.otpExpiresAt) {
+  if (!user.otp || !user.otpExpiresAt || user.otpPurpose !== "EMAIL_VERIFY") {
     throw new Error("Invalid or Expired OTP");
   }
 
@@ -60,6 +59,7 @@ export const verifyEmailOtp = async (email: string, otp: string) => {
   user.isEmailVerified = true;
   user.otp = undefined;
   user.otpExpiresAt = undefined;
+  user.otpPurpose = undefined;
 
   await user.save();
 
@@ -72,7 +72,7 @@ export const resentEmailOtp = async (email: string) => {
 
   if (!user) throw new Error("User Not Found");
 
-  const otp = await setUserOtp(user , 10);
+  const otp = await setUserOtp(user , 10 , "EMAIL_VERIFY");
 
   await sendEmail({
     to: email,
@@ -86,7 +86,7 @@ export const resentEmailOtp = async (email: string) => {
 
 export const loginUser = async (email: string, password: string): Promise<LoginResult> => {
 
-  const user = await User.findOne({ email }).select("+password");
+  const user = await User.findOne({ email }).select("+password +otp +otpExpiresAt +otpPurpose +isEmailVerified");
 
   if (!user) throw new Error("Invalid Credentials");
 
@@ -96,13 +96,16 @@ export const loginUser = async (email: string, password: string): Promise<LoginR
 
   if (!user.isEmailVerified) {
 
-    const otp = await setUserOtp(user , 10);
-    
-    await sendEmail({
-      to: user.email,
-      subject: "Verify your email",
-      htmlContent: otpEmailTemplate(otp),
-    });
+    if(!user.otp || !user.otpExpiresAt || new Date() > user.otpExpiresAt || user.otpPurpose !== "EMAIL_VERIFY") {
+
+      const otp = await setUserOtp(user , 10);
+      
+      await sendEmail({
+        to: user.email,
+        subject: "Verify your email",
+        htmlContent: otpEmailTemplate(otp),
+      });
+  }
 
     throw new Error("EMAIL_NOT_VERIFIED");
 
@@ -117,3 +120,47 @@ export const loginUser = async (email: string, password: string): Promise<LoginR
     isEmailVerified: user.isEmailVerified,
   };
 };
+
+export const forgotPassword = async(email: string) => {
+
+  const user =await User.findOne({email});
+  if(!user){
+    throw new Error("User not found");
+  }
+
+  const otp = await setUserOtp(user , 10 , "PASSWORD_RESET");
+
+  await sendEmail({
+    to : email,
+    subject : "Password Reset OTP",
+    htmlContent : otpEmailTemplate(otp),
+  });
+
+  return { email: user.email, message: "OTP sent to email" };
+}
+
+export const resetPasswordWithOtp = async(email: string , otp: string , newPassword : string) => {
+  const user = await User.findOne({email}).select("+otp +otpExpiresAt +otpPurpose");
+
+  if(!user){
+    throw new Error("User not found");
+  }
+  if (!user.otp || !user.otpExpiresAt || user.otpPurpose !== "PASSWORD_RESET") {
+    throw new Error("Invalid or Expired OTP");
+  }
+  if (new Date() > user.otpExpiresAt) {
+    throw new Error("OTP expired");
+  }
+  if (user.otp !== otp) {
+    throw new Error("Invalid OTP");
+  }
+  user.password = newPassword;
+  user.otp = undefined;
+  user.otpExpiresAt = undefined;
+  user.otpPurpose = undefined;
+  await user.save();
+
+  return { email: user.email , message : "Password reset successful"};
+}
+
+

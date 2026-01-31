@@ -9,6 +9,7 @@ export interface IUser extends Document {
   role: "admin" | "user";
   otp?: string;
   otpExpiresAt?: Date;
+  otpPurpose?: "EMAIL_VERIFY" | "PASSWORD_RESET"
   isEmailVerified: boolean;
   isKycVerified : boolean;
   comparePassword(enteredPassword: string): Promise<boolean>;
@@ -50,6 +51,11 @@ const userSchema: Schema<IUser> = new Schema(
     },
     otpExpiresAt: { 
         type: Date,
+        select : false
+    },
+    otpPurpose: { 
+        type: String, 
+        enum: ["EMAIL_VERIFY", "PASSWORD_RESET"],
         select : false
     },
     isEmailVerified: { 
