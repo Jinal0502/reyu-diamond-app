@@ -3,6 +3,7 @@ import * as InventoryService from "../services/inventory.service";
 import { generateBarcode } from "../utils/barcode.generator";
 import { sendResponse } from "../utils/api.response";
 
+/* ================= CREATE ================= */
 
 export const createInventoryItem = async (
   req: Request,
@@ -10,7 +11,7 @@ export const createInventoryItem = async (
   next: NextFunction
 ) => {
   try {
-    const sellerId = req.user?._id as any;
+    const sellerId = req.user?._id;
 
     const inventory = await InventoryService.createInventory({
       ...req.body,
@@ -18,22 +19,18 @@ export const createInventoryItem = async (
       barcode: generateBarcode(),
     });
 
-    return sendResponse(
-      res,
-      201,
-      true,
-      "Inventory item created",
-      inventory
-    );
-  } catch (error: any) {
+    return sendResponse(res, 201, true, "Inventory item created", inventory);
+  } catch (error) {
     next(error);
   }
 };
 
+/* ================= UPDATE ================= */
 
 export const updateInventoryItem = async (
   req: Request,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) => {
   try {
     const inventoryId = req.params.inventoryId as string;
@@ -43,16 +40,6 @@ export const updateInventoryItem = async (
       req.body
     );
 
-    if (!updatedInventory) {
-      return sendResponse(
-        res,
-        400,
-        false,
-        "Inventory is locked",
-        null
-      );
-    }
-
     return sendResponse(
       res,
       200,
@@ -60,38 +47,22 @@ export const updateInventoryItem = async (
       "Inventory item updated",
       updatedInventory
     );
-  } catch (error: any) {
-    return sendResponse(
-      res,
-      500,
-      false,
-      error.message || "Failed to update inventory",
-      null
-    );
+  } catch (error) {
+    next(error);
   }
 };
 
+/* ================= DELETE ================= */
 
 export const deleteInventoryItem = async (
   req: Request,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) => {
   try {
     const inventoryId = req.params.inventoryId as string;
 
-    const deletedInventory = await InventoryService.deleteInventory(
-      inventoryId,
-    );
-
-    if (!deletedInventory) {
-      return sendResponse(
-        res,
-        400,
-        false,
-        "Inventory not found or locked",
-        null
-      );
-    }
+    await InventoryService.deleteInventory(inventoryId);
 
     return sendResponse(
       res,
@@ -100,49 +71,33 @@ export const deleteInventoryItem = async (
       "Inventory deleted successfully",
       null
     );
-  } catch (error: any) {
-    return sendResponse(
-      res,
-      500,
-      false,
-      error.message || "Failed to delete inventory",
-      null
-    );
+  } catch (error) {
+    next(error);
   }
 };
 
+/* ================= GET ================= */
 
 export const getInventory = async (
-  req: Request,
-  res: Response
+  _req: Request,
+  res: Response,
+  next: NextFunction
 ) => {
   try {
     const inventory = await InventoryService.getInventory();
-
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Inventory fetched successfully",
-      inventory
-    );
-  } catch (error: any) {
-    return sendResponse(
-      res,
-      500,
-      false,
-      error.message || "Failed to fetch inventory",
-      null
-    );
+    return sendResponse(res, 200, true, "Inventory fetched", inventory);
+  } catch (error) {
+    next(error);
   }
 };
 
 export const getInventoryItem = async (
   req: Request,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) => {
   try {
-    const inventoryId = req.params.inventoryId as string; // 👈 explicit cast (response #2)
+    const inventoryId = req.params.inventoryId as string;
 
     const inventory =
       await InventoryService.getInventoryByIdOrBarcode(inventoryId);
@@ -151,20 +106,122 @@ export const getInventoryItem = async (
       return sendResponse(res, 404, false, "Inventory not found", null);
     }
 
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Inventory fetched successfully",
-      inventory
+    return sendResponse(res, 200, true, "Inventory fetched", inventory);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/* ================= ADD MEDIA ================= */
+
+export const addInventoryMedia = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const inventoryId = req.params.inventoryId as string;
+    const files = req.files as Express.Multer.File[];
+
+    if (!files || files.length === 0) {
+      return sendResponse(res, 400, false, "No files uploaded", null);
+    }
+
+    const imageUrls: string[] = [];
+    let videoUrl: string | undefined;
+
+    for (const file of files) {
+      if (file.mimetype.startsWith("image/")) {
+        imageUrls.push(file.path);
+      } else if (file.mimetype.startsWith("video/")) {
+        videoUrl = file.path;
+      }
+    }
+
+    const inventory = await InventoryService.addMedia(
+      inventoryId,
+      imageUrls,
+      videoUrl
     );
-  } catch (error: any) {
-    return sendResponse(
-      res,
-      500,
-      false,
-      error.message || "Failed to fetch inventory",
-      null
+
+    return sendResponse(res, 200, true, "Media added successfully", inventory);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/* ================= REPLACE MEDIA ================= */
+
+export const replaceInventoryMedia = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const inventoryId = req.params.inventoryId as string;
+    const { type, index } = req.body;
+    const files = req.files as Express.Multer.File[];
+
+    const parsedIndex = index !== undefined ? Number(index) : undefined;
+
+
+    if (!["image", "video"].includes(type)) {
+      throw new Error("Invalid media type");
+    }
+
+    if (!files || files.length === 0) {
+      throw new Error("No files uploaded");
+    }
+
+    const mediaUrls = files.map((file) => file.path);
+
+    const inventory = await InventoryService.replaceMedia(
+      inventoryId,
+      type === "image" ? mediaUrls : undefined,
+      type === "video" ? mediaUrls[0] : undefined,
+      type === "image" ? parsedIndex : undefined
     );
+
+    return sendResponse(res, 200, true, "Media replaced", inventory);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/* ================= REMOVE MEDIA ================= */
+
+export const removeInventoryMedia = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const inventoryId = req.params.inventoryId as string;
+
+    let { removeAllImages = false, removeVideo = false } = req.body;
+
+    // convert string to boolean if needed
+    removeAllImages = removeAllImages === true || removeAllImages === "true";
+    removeVideo = removeVideo === true || removeVideo === "true";
+
+    if (!removeAllImages && !removeVideo) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Specify removeAllImages or removeVideo",
+        null
+      );
+    }
+
+    const inventory = await InventoryService.removeMedia(
+      inventoryId,
+      removeAllImages,
+      removeVideo
+    );
+
+    return sendResponse(res, 200, true, "Media removed successfully", inventory);
+  } catch (error) {
+    next(error);
   }
 };

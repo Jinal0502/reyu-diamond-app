@@ -11,6 +11,7 @@ import inventoryRoutes from "../routes/inventory.routes";
 import bidRoutes from "../routes/bid.routes";
 import dealRoutes from "../routes/deal.routes";
 import dealPdfRoutes from "../routes/dealPdfRoutes";
+import auctionRoutes from "../routes/auction.routes"
 import { protect } from "../middlewares/auth.middleware";
 import {kycVerifiedOnly} from "../middlewares/kyc.middleware";
 
@@ -22,6 +23,7 @@ router.use("/user" , protect , userRoutes);
 router.use("/kyc" , protect , kycRoutes);
 router.use("/requirements" , protect , requirementRoutes);
 router.use("/inventory" , inventoryRoutes);
+router.use("/auctions" ,protect , kycVerifiedOnly , auctionRoutes);
 router.use("/bids" , protect , kycVerifiedOnly, bidRoutes);
 router.use("/deals" , protect , kycVerifiedOnly, dealRoutes);
 router.use("/deals" , protect , kycVerifiedOnly, dealPdfRoutes);

@@ -1,34 +1,31 @@
-import {Router} from "express";
+import { Router } from "express";
 import * as BidController from "../controllers/bid.controller";
+import { protect } from "../middlewares/auth.middleware";
 import { ownerOrRole } from "../middlewares/permission.middleware";
-import { Inventory } from "../models/Inventory.model";
+import { Auction } from "../models/Auction.model";
 
 const router = Router();
 
-router.post(
-  "/",
-  BidController.createBid
-);  
+// Buyer creates bid
+router.post("/", BidController.createBid);
 
-router.patch(
-  "/:bidId/status",
-  BidController.updateBidStatus
-);
+// Seller/Admin updates bid status
+router.patch("/:bidId/status", BidController.updateBidStatus);
 
+// Seller/Admin can see all bids in auction
 router.get(
-  "/inventory/:inventoryId",
-  ownerOrRole(Inventory, "sellerId" , ["admin"] , "inventoryId"),
-  BidController.getBidsByInventory
+  "/auction/:auctionId",
+  ownerOrRole(Auction, "sellerId", ["admin"], "auctionId"),
+  BidController.getBidsByAuction
 );
 
+// Public highest bid
 router.get(
-  "/inventory/:inventoryId/highest",
-  BidController.getHighestBidByInventory
+  "/auction/:auctionId/highest",
+  BidController.getHighestBidByAuction
 );
 
-router.get(
-  "/my/:inventoryId",
-  BidController.getMyBid
-);
+// Buyer my bid
+router.get("/my/:auctionId", BidController.getMyBid);
 
 export default router;

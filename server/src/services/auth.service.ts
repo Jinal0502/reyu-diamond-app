@@ -1,6 +1,6 @@
 import { User } from "../models/User.model";
 import { sendEmail } from "../services/email.service";
-import { otpEmailTemplate } from "../utils/templates/email.template";
+import { otpEmailTemplate, passwordResetOtpTemplate } from "../utils/templates/email.template";
 import { setUserOtp } from "../utils/otp.utils";
 
 interface LoginResult {
@@ -133,7 +133,7 @@ export const forgotPassword = async(email: string) => {
   await sendEmail({
     to : email,
     subject : "Password Reset OTP",
-    htmlContent : otpEmailTemplate(otp),
+    htmlContent : passwordResetOtpTemplate(otp),
   });
 
   return { email: user.email, message: "OTP sent to email" };

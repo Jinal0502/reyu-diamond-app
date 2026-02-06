@@ -1,13 +1,9 @@
 import mongoose, { Document, Model } from "mongoose";
 
-export type BidStatus =
-  | "ACTIVE"
-  | "ACCEPTED"
-  | "REJECTED"
-  | "EXPIRED";
+export type BidStatus = "ACTIVE" | "ACCEPTED" | "REJECTED" | "EXPIRED";
 
 export interface IBid extends Document {
-  inventoryId: mongoose.Types.ObjectId;
+  auctionId: mongoose.Types.ObjectId;
   buyerId: mongoose.Types.ObjectId;
 
   bidAmount: number;
@@ -21,9 +17,9 @@ export interface IBid extends Document {
 
 const bidSchema = new mongoose.Schema<IBid>(
   {
-    inventoryId: {
+    auctionId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Inventory",
+      ref: "Auction",
       required: true,
       index: true,
     },
@@ -58,12 +54,23 @@ const bidSchema = new mongoose.Schema<IBid>(
   { timestamps: true }
 );
 
+// Only ONE highest bid per auction
 bidSchema.index(
-  { inventoryId: 1, isHighestBid: 1 },
+  { auctionId: 1, isHighestBid: 1 },
   {
     unique: true,
     partialFilterExpression: { isHighestBid: true },
-    name: "unique_highest_bid_per_inventory",
+    name: "unique_highest_bid_per_auction",
+  }
+);
+
+// Only ONE active bid per user per auction
+bidSchema.index(
+  { auctionId: 1, buyerId: 1, status: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: "ACTIVE" },
+    name: "unique_active_bid_per_user_per_auction",
   }
 );
 

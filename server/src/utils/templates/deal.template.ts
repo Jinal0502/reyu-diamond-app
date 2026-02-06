@@ -1,5 +1,7 @@
 export const dealHtmlTemplate = (deal: any) => {
   const bid = deal.bidId;
+  const auction = deal.auctionId;
+  const inventory = deal.inventoryId;
 
   return `
 <!DOCTYPE html>
@@ -153,18 +155,101 @@ export const dealHtmlTemplate = (deal: any) => {
   <div class="parties">
     <div class="party">
       <strong>Billed To</strong>
-      <p>${deal.buyerId?.name}</p>
-      <p>${deal.buyerId?.email}</p>
+      <p>${deal.buyerId?.name || "N/A"}</p>
+      <p>${deal.buyerId?.email || "N/A"}</p>
     </div>
 
     <div class="party">
       <strong>From</strong>
-      <p>${deal.sellerId?.name}</p>
-      <p>${deal.sellerId?.email}</p>
+      <p>${deal.sellerId?.name || "N/A"}</p>
+      <p>${deal.sellerId?.email || "N/A"}</p>
     </div>
   </div>
 
+  <!-- INVENTORY DETAILS -->
+  ${
+    inventory
+      ? `
+  <div class="section-title">Inventory Details</div>
+  <table>
+    <tr>
+      <th>Field</th>
+      <th>Value</th>
+    </tr>
+    <tr>
+      <td>Inventory ID</td>
+      <td>${inventory._id}</td>
+    </tr>
+    ${
+      inventory.title
+        ? `<tr><td>Title</td><td>${inventory.title}</td></tr>`
+        : ""
+    }
+    ${
+      inventory.status
+        ? `<tr><td>Status</td><td>${inventory.status}</td></tr>`
+        : ""
+    }
+  </table>
+  `
+      : ""
+  }
+
+  <!-- AUCTION DETAILS -->
+  ${
+    auction
+      ? `
+  <div class="section-title">Auction Details</div>
+  <table>
+    <tr>
+      <th>Field</th>
+      <th>Value</th>
+    </tr>
+    <tr>
+      <td>Auction ID</td>
+      <td>${auction._id}</td>
+    </tr>
+    <tr>
+      <td>Status</td>
+      <td>${auction.status}</td>
+    </tr>
+    <tr>
+      <td>Base Price</td>
+      <td>${deal.currency} ${auction.basePrice}</td>
+    </tr>
+    <tr>
+      <td>Current Bid</td>
+      <td>${deal.currency} ${auction.currentBid}</td>
+    </tr>
+    ${
+      auction.startTime
+        ? `<tr><td>Start Time</td><td>${new Date(
+            auction.startTime
+          ).toLocaleString()}</td></tr>`
+        : ""
+    }
+    ${
+      auction.endTime
+        ? `<tr><td>End Time</td><td>${new Date(
+            auction.endTime
+          ).toLocaleString()}</td></tr>`
+        : ""
+    }
+    ${
+      auction.endedAt
+        ? `<tr><td>Ended At</td><td>${new Date(
+            auction.endedAt
+          ).toLocaleString()}</td></tr>`
+        : ""
+    }
+  </table>
+  `
+      : ""
+  }
+
   <!-- AMOUNT TABLE -->
+  <div class="section-title">Payment Summary</div>
+
   <table>
     <tr>
       <th>Description</th>
@@ -172,7 +257,7 @@ export const dealHtmlTemplate = (deal: any) => {
     </tr>
 
     <tr>
-      <td>Deal Amount</td>
+      <td>Final Deal Amount</td>
       <td class="right">${deal.currency} ${deal.dealAmount}</td>
     </tr>
 
@@ -180,7 +265,7 @@ export const dealHtmlTemplate = (deal: any) => {
       bid
         ? `
     <tr>
-      <td>Bid Reference (${bid._id})</td>
+      <td>Accepted Bid (${bid._id})</td>
       <td class="right">${bid.currency || deal.currency} ${bid.bidAmount}</td>
     </tr>`
         : ""

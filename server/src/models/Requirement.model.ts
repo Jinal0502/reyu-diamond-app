@@ -12,13 +12,17 @@ export interface IRequirement {
     color: string[];
     clarity: string[];
     lab: boolean;
+    labName?: string[]; // optional: preferred labs
   };
 
   constraints: {
     budget: number;
     currency: string;
     location: string[];
-    deadline: Date;
+    pricePerCarat?: {
+      min?: number;
+      max?: number;
+    };
   };
 
   preferences?: {
@@ -28,8 +32,11 @@ export interface IRequirement {
     fluorescence?: string[];
     certificate?: string[];
     notes?: string;
+    priority?: number; // higher number = higher priority
+    isActive?: boolean; // if the preference is currently active
   };
-  status?: "active" | "close" | "expired";
+
+  matchedInventoryIds?: Types.ObjectId[]; // optional: track matching inventory
 }
 
 const RequirementSchema = new Schema<IRequirement>(
@@ -44,34 +51,37 @@ const RequirementSchema = new Schema<IRequirement>(
     intent: {
       shape: { type: [String], required: true },
       carat: {
-        min: { type: Number, required: true },
-        max: { type: Number, required: true },
+        min: { type: Number, required: true, min: 0 },
+        max: { type: Number, required: true, min: 0 },
       },
       color: { type: [String], required: true },
       clarity: { type: [String], required: true },
       lab: { type: Boolean, required: true },
+      labName: { type: [String], default: [] },
     },
 
     constraints: {
-      budget: { type: Number, required: true },
-      currency: { type: String, required: true },
+      budget: { type: Number, required: true, min: 0 },
+      currency: { type: String, required: true, default: "INR" },
       location: { type: [String], required: true },
-      deadline: { type: Date, required: true, index: true },
+      pricePerCarat: {
+        min: { type: Number, min: 0 },
+        max: { type: Number, min: 0 },
+      },
     },
 
     preferences: {
-      cut: [String],
-      polish: [String],
-      symmetry: [String],
-      fluorescence: [String],
-      certificate: [String],
-      notes: String,
+      cut: { type: [String], default: [] },
+      polish: { type: [String], default: [] },
+      symmetry: { type: [String], default: [] },
+      fluorescence: { type: [String], default: [] },
+      certificate: { type: [String], default: [] },
+      notes: { type: String, maxlength: 500 },
+      priority: { type: Number, default: 0 },
+      isActive: { type: Boolean, default: true },
     },
-    status: {
-    type: String,
-    enum: ["active", "close", "expired"],
-    default: "active",
-},
+
+    matchedInventoryIds: { type: [Schema.Types.ObjectId], ref: "Inventory", default: [] },
   },
   { timestamps: true }
 );

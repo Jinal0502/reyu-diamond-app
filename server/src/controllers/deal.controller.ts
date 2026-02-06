@@ -2,30 +2,13 @@ import { Request, Response, NextFunction } from "express";
 import * as DealService from "../services/deal.service";
 import { sendResponse } from "../utils/api.response";
 
-export const createDeal = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const deal = await DealService.createDealService(
-      req.params.bidId as string,
-      req.user._id.toString()
-    );
-
-    return sendResponse(res, 201, true, "Deal created successfully", deal);
-  } catch (error) {
-    next(error);
-  }
-};
-
 export const getDeal = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const deal = await DealService.getDealById(
+    const deal = await DealService.getDealByIdService(
       req.params.dealId as string,
       req.user._id.toString(),
       req.userRole
@@ -43,7 +26,7 @@ export const listDeals = async (
   next: NextFunction
 ) => {
   try {
-    const deals = await DealService.getDealsForUser(
+    const deals = await DealService.getDealsForUserService(
       req.user._id.toString(),
       req.userRole
     );
@@ -54,9 +37,6 @@ export const listDeals = async (
   }
 };
 
-/**
- * Update deal status with role + actor validation
- */
 export const updateDealStatus = async (
   req: Request,
   res: Response,
@@ -69,7 +49,7 @@ export const updateDealStatus = async (
       throw new Error("Status is required");
     }
 
-    const deal = await DealService.updateDealStatus(
+    const deal = await DealService.updateDealStatusService(
       req.params.dealId as string,
       status,
       req.user._id.toString(),

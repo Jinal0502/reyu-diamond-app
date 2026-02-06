@@ -25,7 +25,6 @@ export const errorHandler = (
 
     return sendResponse(res, 409, false, message, null);
   }
-
   const statusCode = err.statusCode || 500;
 
   const message =

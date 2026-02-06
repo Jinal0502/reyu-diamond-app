@@ -4,6 +4,7 @@ import { protect } from "../middlewares/auth.middleware";
 import { ownerOrRole} from "../middlewares/permission.middleware";
 import { Inventory } from "../models/Inventory.model";
 import { kycVerifiedOnly } from "../middlewares/kyc.middleware";
+import { inventoryUpload } from "../middlewares/inventoryUpload.middleware";
 
 const router = Router();
 
@@ -28,7 +29,7 @@ router.put(
   "/:inventoryId",
   protect,
   kycVerifiedOnly,
-  ownerOrRole(Inventory , "sellerId" , ["admin"] , "inventoryId"),
+  ownerOrRole(Inventory , "sellerId" , [] , "inventoryId"),
   InventoryController.updateInventoryItem
 );
 
@@ -36,8 +37,34 @@ router.delete(
   "/:inventoryId",
   protect,
   kycVerifiedOnly,
-  ownerOrRole(Inventory , "sellerId" , ["admin"] , "inventoryId"),
+  ownerOrRole(Inventory , "sellerId" , [] , "inventoryId"),
   InventoryController.deleteInventoryItem
+);
+
+router.post(
+  "/:inventoryId/media",
+  protect,
+  kycVerifiedOnly,
+  ownerOrRole(Inventory , "sellerId" , [] , "inventoryId"),
+  inventoryUpload.array("media" , 6),
+  InventoryController.addInventoryMedia
+);
+
+router.put(
+  "/:inventoryId/media",
+  protect,
+  kycVerifiedOnly,
+  ownerOrRole(Inventory , "sellerId" , [] , "inventoryId"),
+  inventoryUpload.array("media" , 5),
+  InventoryController.replaceInventoryMedia
+);
+
+router.delete(
+  "/:inventoryId/media",
+  protect,
+  kycVerifiedOnly,
+  ownerOrRole(Inventory , "sellerId" , [] , "inventoryId"),
+  InventoryController.removeInventoryMedia
 );
 
 export default router;

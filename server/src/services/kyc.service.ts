@@ -1,7 +1,7 @@
 import mongoose, { Types } from "mongoose";
 import { KYC } from "../models/Kyc.model";
 import { User } from "../models/User.model";
-import  {deleteKycFiles} from "../utils/cloundinary.delete";
+import { deleteFolderByPrefix } from "../utils/cloundinary.delete";
 import crypto from "crypto";
 
 interface IUserPopulated {
@@ -12,6 +12,8 @@ interface IUserPopulated {
 
 const hashValue = (value: string) =>
   crypto.createHash("sha256").update(value).digest("hex");
+
+/* ================= SUBMIT KYC ================= */
 
 export const submitKyc = async (
   userId: string,
@@ -32,8 +34,9 @@ export const submitKyc = async (
     throw new Error("KYC already approved");
   }
 
+  // 🔥 DELETE OLD KYC FILES FROM CLOUDINARY FIRST
   if (existing) {
-    await deleteKycFiles(userId);
+    await deleteFolderByPrefix(`kyc/${userId}`);
   }
 
   return KYC.findOneAndUpdate(
@@ -61,6 +64,9 @@ export const submitKyc = async (
     { upsert: true, new: true }
   );
 };
+
+/* ================= VERIFY KYC ================= */
+
 type KycDecision = "approved" | "rejected";
 
 export const verifyKyc = async (
@@ -79,8 +85,8 @@ export const verifyKyc = async (
   if (!kyc) throw new Error("KYC not found");
 
   if (kyc.status === "approved") {
-  throw new Error("KYC already approved");
-}
+    throw new Error("KYC already approved");
+  }
 
   kyc.status = decision;
   kyc.verifiedBy = new mongoose.Types.ObjectId(adminId);
@@ -95,6 +101,8 @@ export const verifyKyc = async (
 
   return kyc;
 };
+
+/* ================= GET KYCS ================= */
 
 export const getKycs = async (page = 1, limit = 10, status?: string) => {
   const query: any = status ? { status } : {};

@@ -8,13 +8,14 @@ export const generateAndUploadDealPdf = async (dealId: string) => {
     .populate("inventoryId")
     .populate("buyerId", "name email")
     .populate("sellerId", "name email")
-    .populate("bidId"); 
+    .populate("bidId")
+    .populate("auctionId"); // ✅ ADDED
 
   if (!deal) {
     throw new Error("Deal not found");
   }
 
-  //  Generate HTML
+  // Generate HTML
   const html = dealHtmlTemplate(deal);
 
   // Launch Puppeteer
@@ -26,7 +27,7 @@ export const generateAndUploadDealPdf = async (dealId: string) => {
   const page = await browser.newPage();
   await page.setContent(html, { waitUntil: "networkidle0" });
 
-  //  Generate PDF
+  // Generate PDF
   const pdfBuffer = await page.pdf({
     format: "A4",
     printBackground: true,
@@ -44,24 +45,26 @@ export const generateAndUploadDealPdf = async (dealId: string) => {
     .toISOString()
     .slice(0, 10)}`;
 
-  //  Upload to Cloudinary (RAW)
+  // Upload to Cloudinary (RAW)
   const uploadResult = await new Promise<any>((resolve, reject) => {
-    cloudinary.uploader.upload_stream(
-      {
-        folder: "deals/pdfs",
-        resource_type: "image",
-        public_id: `deal_${deal._id}`,
-        format: "pdf",
-        flags: ["attachment"]
-      },
-      (error, result) => {
-        if (error) reject(error);
-        else resolve(result);
-      }
-    ).end(pdfBuffer);
+    cloudinary.uploader
+      .upload_stream(
+        {
+          folder: "deals/pdfs",
+          resource_type: "raw", // ✅ FIXED (pdf must be raw)
+          public_id: `deal_${deal._id}`,
+          format: "pdf",
+          flags: "attachment", // ✅ FIXED
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      )
+      .end(pdfBuffer);
   });
 
-  //  Save PDF URL
+  // Save PDF URL
   deal.pdfPath = uploadResult.secure_url;
   await deal.save();
 

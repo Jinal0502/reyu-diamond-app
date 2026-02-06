@@ -45,7 +45,7 @@ export const submitKyc = async (req: any, res: any, next: any) => {
       htmlContent: `<p>User ${req.user.email} submitted KYC.</p>`,
     });
 
-    return sendResponse(res, 200, true, "KYC submitted successfully");
+    return sendResponse(res, 200, true, "KYC submitted successfully" , kyc);
   } catch (err) {
     if (err instanceof multer.MulterError) {
       return sendResponse(res, 400, false, err.message);
@@ -62,7 +62,7 @@ export const verifyKyc = async (req: any, res: any, next: any) => {
     }
 
     const kyc = await KycService.verifyKyc(
-      req.params.kycId,
+      req.params.id,
       req.user._id,
       decision,
       reason

@@ -13,7 +13,7 @@ router.get(
 
 router.get(
   "/:requirementId",
-  ownerOrRole(Requirement , "userId"),
+  ownerOrRole(Requirement , "userId" , [] , "requirementId"),
   RequirementController.getRequirementById
 );
 router.post(
@@ -25,7 +25,7 @@ router.post(
 router.put(
   "/:requirementId",
   kycVerifiedOnly,
-  ownerOrRole(Requirement, "userId", ["admin"]),
+  ownerOrRole(Requirement, "userId", [] , "requirementId"),
   RequirementController.updateRequirement
 );
 
@@ -33,7 +33,7 @@ router.put(
 router.delete(
   "/:requirementId",
   kycVerifiedOnly,
-  ownerOrRole(Requirement, "userId", ["admin"]), 
+  ownerOrRole(Requirement, "userId", [] , "requirementId"), 
   RequirementController.deleteRequirement
 );
 

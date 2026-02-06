@@ -1,4 +1,4 @@
-import mongoose, {Schema , Document , Types} from "mongoose";
+import mongoose, { Schema, Document, Types } from "mongoose";
 
 export type DealStatus =
   | "CREATED"
@@ -23,6 +23,7 @@ export const DEAL_TRANSITIONS: Record<DealStatus, DealStatus[]> = {
 
 export interface IDeal extends Document {
   bidId: Types.ObjectId;
+  auctionId: Types.ObjectId;
   inventoryId: Types.ObjectId;
   buyerId: Types.ObjectId;
   sellerId: Types.ObjectId;
@@ -67,8 +68,28 @@ export interface IDeal extends Document {
 
 const DealSchema = new Schema<IDeal>(
   {
-    bidId: { type: Schema.Types.ObjectId, ref: "Bid", required: true, unique: true },
-    inventoryId: { type: Schema.Types.ObjectId, ref: "Inventory", required: true, index: true },
+    bidId: {
+      type: Schema.Types.ObjectId,
+      ref: "Bid",
+      required: true,
+      unique: true,
+      index: true,
+    },
+
+    auctionId: {
+      type: Schema.Types.ObjectId,
+      ref: "Auction",
+      required: true,
+      index: true,
+    },
+
+    inventoryId: {
+      type: Schema.Types.ObjectId,
+      ref: "Inventory",
+      required: true,
+      index: true,
+    },
+
     buyerId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     sellerId: { type: Schema.Types.ObjectId, ref: "User", required: true },
 
@@ -116,7 +137,7 @@ const DealSchema = new Schema<IDeal>(
     history: [
       {
         status: { type: String, required: true },
-        changedBy: { type: Schema.Types.ObjectId, ref: "User" },
+        changedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
         changedAt: { type: Date, default: Date.now },
       },
     ],

@@ -1,28 +1,17 @@
-import { Requirement , IRequirement } from "../models/Requirement.model";
-import {Types} from "mongoose";
+import { Requirement, IRequirement } from "../models/Requirement.model";
+import { Types } from "mongoose";
 
-const expireRequirements = async () => {
-
-  const now = new Date();
-  await Requirement.updateMany(
-    {status : "active" , "constraints.deadline" : {$lt: now}},
-    {status : "expired"}
-  );
-};
-
-export const createRequirement = async (data : Partial<IRequirement>) => {
-
-  if(!data.userId || !data.intent || !data.constraints){
-
+// Create a new preference requirement
+export const createRequirement = async (data: Partial<IRequirement>) => {
+  if (!data.userId || !data.intent || !data.constraints) {
     throw new Error("Invalid data");
   }
+
   const userId = new Types.ObjectId(data.userId);
 
-  await expireRequirements();
-
+  // Optional: check for duplicate intent/preferences for the same user
   const existing = await Requirement.findOne({
     userId,
-    status: "active",
     "intent.shape": { $all: data.intent.shape },
     "intent.color": { $all: data.intent.color },
     "intent.clarity": { $all: data.intent.clarity },
@@ -32,63 +21,41 @@ export const createRequirement = async (data : Partial<IRequirement>) => {
     "constraints.currency": data.constraints.currency,
   });
 
-  if(existing) {
-    throw new Error("Duplicate active requirement exists");
+  if (existing) {
+    throw new Error("Duplicate requirement exists");
   }
 
-  return Requirement.create({ ...data , userId , status: "active"});
+  return Requirement.create({ ...data, userId });
 };
 
-export const getRequirementsByUser = async(
-  userId : string,
-  status?: "active" | "close" | "expired"
-) =>{
-
-  await expireRequirements();
-
-  const query : any = {userId : new Types.ObjectId(userId)};
-
-  if(status) {
-    query.status = status;
-  }
-
-  return Requirement.find(query).sort({createdAt : -1});
+// Get all preferences for a user
+export const getRequirementsByUser = async (userId: string) => {
+  return Requirement.find({ userId: new Types.ObjectId(userId) }).sort({
+    createdAt: -1,
+  });
 };
 
-export const getRequirementById = async(requirementId : string) => {
-
-  if(!Types.ObjectId.isValid(requirementId)) return null;
-
+// Get a single requirement by ID
+export const getRequirementById = async (requirementId: string) => {
+  if (!Types.ObjectId.isValid(requirementId)) return null;
   return Requirement.findById(requirementId);
-}
+};
 
-export const updateRequirement = async(
-  requirementId : string,
-  data : Partial<IRequirement>
+// Update a requirement
+export const updateRequirement = async (
+  requirementId: string,
+  data: Partial<IRequirement>
 ) => {
   const requirement = await Requirement.findById(requirementId);
+  if (!requirement) throw new Error("Requirement not found");
 
-  if(!requirement) throw new Error("Requirement not found");
+  return Requirement.findByIdAndUpdate(requirement._id, data, { new: true });
+};
 
-  if(requirement.status !== "active"){
-
-    throw new Error("Cannot update closed or expired requirement");
-  }
-
-  return Requirement.findByIdAndUpdate(requirement._id , data , {new : true});
-}
-
-export const deleteRequirement = async(requirementId : string) => {
-  
+// Delete a requirement
+export const deleteRequirement = async (requirementId: string) => {
   const requirement = await Requirement.findById(requirementId);
-
-  if(!requirement) throw new Error("Requirement not found");
-
-  if(requirement.status === "close"){
-
-    throw new Error("Cannot delete closed requirement");
-  }
+  if (!requirement) throw new Error("Requirement not found");
 
   return Requirement.findByIdAndDelete(requirement._id);
-
-}
+};

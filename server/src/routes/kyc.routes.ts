@@ -18,7 +18,7 @@ router.post(
 router.get("/",  permit("admin"), KycController.getKycs);
 
 router.put(
-  "/:kycId/verify-kyc",
+  "/:id/verify-kyc",
   permit("admin"),
   KycController.verifyKyc
 );
