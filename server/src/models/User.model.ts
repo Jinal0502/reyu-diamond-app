@@ -12,6 +12,7 @@ export interface IUser extends Document {
   otpPurpose?: "EMAIL_VERIFY" | "PASSWORD_RESET"
   isEmailVerified: boolean;
   isKycVerified : boolean;
+  stripeAccountId?: string
   comparePassword(enteredPassword: string): Promise<boolean>;
 }
 
@@ -66,6 +67,11 @@ const userSchema: Schema<IUser> = new Schema(
     isKycVerified: {
       type: Boolean,
       default: false,
+    },
+
+    stripeAccountId : {
+      type : String,
+      trim : true,
     },
   },
   { timestamps: true }

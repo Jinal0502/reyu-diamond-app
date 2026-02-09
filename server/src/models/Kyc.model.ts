@@ -19,7 +19,7 @@ interface IKycDocuments {
     url: string;
     publicId: string;
   };
-  selfie: {
+  selfie?: {
     url: string;
     publicId: string;
   };
@@ -27,8 +27,24 @@ interface IKycDocuments {
 
 export interface IKyc extends Document {
   userId: Types.ObjectId;
-  name: string;
+
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+
+  dob: Date;
+  phone: string;
+
+  address: {
+    residentialAddress: string;
+    city: string;
+    state: string;
+    pincode: string;
+    country: string;
+  };
+
   documents: IKycDocuments;
+
   status: KycStatus;
   rejectionReason?: string;
   verifiedBy?: Types.ObjectId;
@@ -45,10 +61,77 @@ const KycSchema = new Schema<IKyc>(
       index: true,
     },
 
-    name: {
+    firstName: {
       type: String,
       required: true,
       trim: true,
+      maxlength: 50,
+    },
+
+    middleName: {
+      type: String,
+      trim: true,
+      maxlength: 50,
+    },
+
+    lastName: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 50,
+    },
+
+    dob: {
+      type: Date,
+      required: true,
+    },
+
+    phone: {
+      type: String,
+      required: true,
+      trim: true,
+      validate: {
+        validator: (v: string) => /^[6-9]\d{9}$/.test(v),
+        message: "Invalid phone number",
+      },
+    },
+
+    address: {
+      type: new Schema(
+        {
+          residentialAddress: {
+            type: String,
+            required: true,
+            trim: true,
+          },
+          city: {
+            type: String,
+            required: true,
+            trim: true,
+          },
+          state: {
+            type: String,
+            required: true,
+            trim: true,
+          },
+          pincode: {
+            type: String,
+            required: true,
+            trim: true,
+            validate: {
+              validator: (v: string) => /^\d{6}$/.test(v),
+              message: "Invalid pincode",
+            },
+          },
+          country: {
+            type: String,
+            default: "IN",
+            trim: true,
+          },
+        },
+        { _id: false }
+      ),
+      required: true,
     },
 
     documents: {
@@ -58,7 +141,7 @@ const KycSchema = new Schema<IKyc>(
             aadhaarHash: {
               type: String,
               required: true,
-              select: false, 
+              select: false,
             },
             aadhaarLast4: {
               type: String,
@@ -76,7 +159,7 @@ const KycSchema = new Schema<IKyc>(
             panHash: {
               type: String,
               required: true,
-              select: false, // 🔒 hidden by default
+              select: false,
             },
             panLast4: {
               type: String,
@@ -92,8 +175,8 @@ const KycSchema = new Schema<IKyc>(
           },
 
           selfie: {
-            url: { type: String, required: true },
-            publicId: { type: String, required: true },
+            url: { type: String},
+            publicId: { type: String},
           },
         },
         { _id: false }

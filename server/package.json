@@ -30,7 +30,8 @@
     "nodemailer": "^7.0.12",
     "pdfkit": "^0.17.2",
     "puppeteer": "^24.36.1",
-    "validator": "^13.15.26"
+    "validator": "^13.15.26",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",

@@ -9,14 +9,13 @@ const storage = new CloudinaryStorage({
 
     const userId = req.user._id.toString();
 
-    // Reject any non-image
     if (!["image/jpeg", "image/jpg", "image/png"].includes(file.mimetype)) {
       throw new Error("Only JPG, JPEG, PNG files are allowed.");
     }
 
     return {
       folder: `kyc/${userId}`,
-      public_id: file.fieldname,
+      public_id: `${file.fieldname}_${Date.now()}`,   // ✅ changed
       allowed_formats: ["jpg", "jpeg", "png"],
       resource_type: "image",
     };

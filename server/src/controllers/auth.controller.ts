@@ -18,15 +18,7 @@ export const register = async (req: Request, res: Response , next : any) => {
       data,
     );
   } catch (err: any) {
-    if (err.message === "USER_ALREADY_EXISTS") {
-      return sendResponse(
-        res,
-        409,
-        false,
-        "User already exists",
-      );
-    }
-
+    
     next(err);
   }
 };
@@ -80,10 +72,6 @@ export const login = async(req : Request , res : Response , next : any) => {
     }
 
     catch(err : any){
-
-        if(err.message === "EMAIL_NOT_VERIFIED"){
-          return sendResponse(res, 400, false, "Email is not verified. OTP sent to email" , { isEmailVerified : false } );
-        }
         
         next(err);
 

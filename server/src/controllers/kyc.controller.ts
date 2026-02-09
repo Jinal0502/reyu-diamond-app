@@ -6,17 +6,27 @@ import { sendResponse } from "../utils/api.response";
 export const submitKyc = async (req: any, res: any, next: any) => {
   try {
     const files = req.files;
-    const { aadhaarNo, panNo, fullName } = req.body;
 
-    if (!aadhaarNo || !panNo) {
-      return sendResponse(res, 400, false, "Aadhaar & PAN numbers are required");
-    }
+    const {
+      firstName,
+      middleName,
+      lastName,
+      dob,
+      phone,
+      residentialAddress,
+      city,
+      state,
+      pincode,
+      country,
+      aadhaarNo,
+      panNo,
+    } = req.body;
 
-    if (!files?.aadhaar || !files?.pan || !files?.selfie) {
-      return sendResponse(res, 400, false, "All documents are required");
-    }
-
-    const documents = {
+    const documents: {
+      aadhaar: { url: string; publicId: string };
+      pan: { url: string; publicId: string };
+      selfie?: { url: string; publicId: string };
+    } = {
       aadhaar: {
         url: files.aadhaar[0].path,
         publicId: files.aadhaar[0].filename,
@@ -25,19 +35,35 @@ export const submitKyc = async (req: any, res: any, next: any) => {
         url: files.pan[0].path,
         publicId: files.pan[0].filename,
       },
-      selfie: {
-        url: files.selfie[0].path,
-        publicId: files.selfie[0].filename,
-      },
     };
 
-    const kyc = await KycService.submitKyc(
-      req.user._id,
-      fullName,
+    if (files?.selfie?.length > 0) {
+      documents.selfie = {
+        url: files.selfie[0].path,
+        publicId: files.selfie[0].filename,
+      };
+    }
+
+    const kyc = await KycService.submitKyc(req.user._id, {
+      firstName,
+      middleName,
+      lastName,
+      dob,
+      phone,
+
+      address: {
+        residentialAddress,
+        city,
+        state,
+        pincode,
+        country,
+      },
+
       aadhaarNo,
       panNo,
-      documents
-    );
+
+      documents,
+    });
 
     await sendEmail({
       to: process.env.ADMIN_EMAIL!,
@@ -45,21 +71,18 @@ export const submitKyc = async (req: any, res: any, next: any) => {
       htmlContent: `<p>User ${req.user.email} submitted KYC.</p>`,
     });
 
-    return sendResponse(res, 200, true, "KYC submitted successfully" , kyc);
+    return sendResponse(res, 200, true, "KYC submitted successfully", kyc);
   } catch (err) {
     if (err instanceof multer.MulterError) {
-      return sendResponse(res, 400, false, err.message);
+      return sendResponse(res, 400, false, err.message, null);
     }
     next(err);
   }
 };
+
 export const verifyKyc = async (req: any, res: any, next: any) => {
   try {
     const { decision, reason } = req.body;
-
-    if (!["approved", "rejected"].includes(decision)) {
-      return sendResponse(res, 400, false, "Invalid decision");
-    }
 
     const kyc = await KycService.verifyKyc(
       req.params.id,
@@ -77,7 +100,7 @@ export const verifyKyc = async (req: any, res: any, next: any) => {
           : `Your KYC was rejected. Reason: ${reason}`,
     });
 
-    return sendResponse(res, 200, true, `KYC ${decision}`);
+    return sendResponse(res, 200, true, `KYC ${decision}`, kyc);
   } catch (err) {
     next(err);
   }
@@ -98,5 +121,3 @@ export const getKycs = async (req: any, res: any, next: any) => {
     next(err);
   }
 };
-
-
