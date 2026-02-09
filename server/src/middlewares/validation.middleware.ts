@@ -6,12 +6,17 @@ export const validate =
   (schema: ZodSchema) =>
   (req: Request, res: Response, next: NextFunction) => {
     try {
-      schema.parse(req.body);
+      schema.parse({
+        body: req.body,
+        query: req.query,
+        params: req.params,
+      });
+
       next();
     } catch (err: any) {
       if (err instanceof ZodError) {
         const errors = err.issues.map((issue) => ({
-          field: issue.path.join("."),
+          field: issue.path.join("."), // example: body.name
           message: issue.message,
         }));
 
@@ -21,6 +26,8 @@ export const validate =
       next(err);
     }
   };
+
+/* ================= KYC FILE VALIDATION ================= */
 
 export const validateKycFiles = (
   req: any,
@@ -40,8 +47,6 @@ export const validateKycFiles = (
   if (!files?.pan || files.pan.length === 0) {
     return sendResponse(res, 400, false, "PAN document is required", null);
   }
-
-  // selfie is optional (no validation needed)
 
   next();
 };
