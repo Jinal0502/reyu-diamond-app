@@ -4,15 +4,23 @@ import connectDB from "./config/db.js";
 import cors , {CorsOptions} from "cors";
 import routes from "./routes/index.routes.js"
 import { errorHandler } from "./middlewares/error.middleware.js";
+import {stripeWebhookController} from "./controllers/stripe.webhook.controller.js"
+
 
 dotenv.config();
 connectDB();
 const app: Application = express();
 
+
 const corsOptions: CorsOptions = {
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   credentials: true
 };
+app.use(
+  "/webhook",
+  express.raw({ type: "application/json" }),
+  stripeWebhookController
+);
 
 // Middleware
 app.use(express.json());

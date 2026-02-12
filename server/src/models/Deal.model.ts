@@ -3,6 +3,7 @@ import mongoose, { Schema, Document, Types } from "mongoose";
 export type DealStatus =
   | "CREATED"
   | "PAYMENT_PENDING"
+  | "PAYMENT_FAILED"
   | "IN_ESCROW"
   | "SHIPPED"
   | "DELIVERED"
@@ -13,6 +14,7 @@ export type DealStatus =
 export const DEAL_TRANSITIONS: Record<DealStatus, DealStatus[]> = {
   CREATED: ["PAYMENT_PENDING", "CANCELLED"],
   PAYMENT_PENDING: ["IN_ESCROW", "CANCELLED"],
+  PAYMENT_FAILED : ["PAYMENT_PENDING" , "CANCELLED"],
   IN_ESCROW: ["SHIPPED", "DISPUTED"],
   SHIPPED: ["DELIVERED", "DISPUTED"],
   DELIVERED: ["COMPLETED", "DISPUTED"],
@@ -50,10 +52,15 @@ export interface IDeal extends Document {
     reason: string;
     raisedBy: Types.ObjectId;
     raisedAt: Date;
-    resolvedAt?: Date;
-    resolution?: string;
-  };
 
+    resolvedBy?: Types.ObjectId;
+    resolvedAt?: Date;
+
+    resolution?: "REFUND_BUYER" | "RELEASE_SELLER";
+    adminNote?: string;
+  };
+  sellerConfirmedShipped?: boolean;
+  buyerConfirmedDelivered?: boolean;
   history: {
     status: DealStatus;
     changedBy: Types.ObjectId;
@@ -101,6 +108,7 @@ const DealSchema = new Schema<IDeal>(
       enum: [
         "CREATED",
         "PAYMENT_PENDING",
+        "PAYMENT_FAILED",
         "IN_ESCROW",
         "SHIPPED",
         "DELIVERED",
@@ -130,8 +138,24 @@ const DealSchema = new Schema<IDeal>(
       reason: String,
       raisedBy: { type: Schema.Types.ObjectId, ref: "User" },
       raisedAt: Date,
+
+      resolvedBy: { type: Schema.Types.ObjectId, ref: "User" },
       resolvedAt: Date,
-      resolution: String,
+
+      resolution : {
+        type : String,
+        enum : ["REFUND_BUYER" , "RELEASE_SELLER"],
+      },
+      adminNote : String,
+    },
+    sellerConfirmedShipped: {
+      type: Boolean,
+      default: false,
+    },
+
+    buyerConfirmedDelivered: {
+      type: Boolean,
+      default: false,
     },
 
     history: [

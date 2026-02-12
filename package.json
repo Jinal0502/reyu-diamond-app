@@ -9,5 +9,8 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.0"
+  },
+  "dependencies": {
+    "cloudflared": "^0.7.1"
   }
 }

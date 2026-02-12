@@ -7,12 +7,20 @@ export interface IUser extends Document {
   email: string;
   password: string;
   role: "admin" | "user";
+
   otp?: string;
   otpExpiresAt?: Date;
-  otpPurpose?: "EMAIL_VERIFY" | "PASSWORD_RESET"
+  otpPurpose?: "EMAIL_VERIFY" | "PASSWORD_RESET";
+
   isEmailVerified: boolean;
-  isKycVerified : boolean;
-  stripeAccountId?: string
+  isKycVerified: boolean;
+
+  stripeAccountId?: string;
+
+  stripeOnboardingStatus?: "NOT_CREATED" | "PENDING" | "COMPLETED";
+  stripeChargesEnabled?: boolean;
+  stripePayoutsEnabled?: boolean;
+
   comparePassword(enteredPassword: string): Promise<boolean>;
 }
 
@@ -24,6 +32,7 @@ const userSchema: Schema<IUser> = new Schema(
       trim: true,
       maxLength: [50, "Name cannot be more than 50 characters"],
     },
+
     email: {
       type: String,
       required: [true, "Email is required"],
@@ -34,34 +43,40 @@ const userSchema: Schema<IUser> = new Schema(
         message: "Please enter a valid email",
       },
     },
+
     password: {
       type: String,
       required: [true, "Please add a password"],
       minlength: [6, "Password must be at least 6 characters"],
       select: false,
     },
+
     role: {
       type: String,
       enum: ["admin", "user"],
       default: "user",
       trim: true,
     },
-    otp: { 
-        type: String, 
-        select: false 
+
+    otp: {
+      type: String,
+      select: false,
     },
-    otpExpiresAt: { 
-        type: Date,
-        select : false
+
+    otpExpiresAt: {
+      type: Date,
+      select: false,
     },
-    otpPurpose: { 
-        type: String, 
-        enum: ["EMAIL_VERIFY", "PASSWORD_RESET"],
-        select : false
+
+    otpPurpose: {
+      type: String,
+      enum: ["EMAIL_VERIFY", "PASSWORD_RESET"],
+      select: false,
     },
-    isEmailVerified: { 
-        type: Boolean, 
-        default: false 
+
+    isEmailVerified: {
+      type: Boolean,
+      default: false,
     },
 
     isKycVerified: {
@@ -69,9 +84,26 @@ const userSchema: Schema<IUser> = new Schema(
       default: false,
     },
 
-    stripeAccountId : {
-      type : String,
-      trim : true,
+    stripeAccountId: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
+    stripeOnboardingStatus: {
+      type: String,
+      enum: ["NOT_CREATED", "PENDING", "COMPLETED"],
+      default: "NOT_CREATED",
+    },
+
+    stripeChargesEnabled: {
+      type: Boolean,
+      default: false,
+    },
+
+    stripePayoutsEnabled: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }
@@ -83,7 +115,9 @@ userSchema.pre<IUser>("save", async function () {
 });
 
 // Compare entered password with hashed password
-userSchema.methods.comparePassword = async function (enteredPassword: string): Promise<boolean> {
+userSchema.methods.comparePassword = async function (
+  enteredPassword: string
+): Promise<boolean> {
   return bcrypt.compare(enteredPassword, this.password);
 };
 

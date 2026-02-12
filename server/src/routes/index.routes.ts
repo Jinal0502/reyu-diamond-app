@@ -11,7 +11,9 @@ import inventoryRoutes from "../routes/inventory.routes";
 import bidRoutes from "../routes/bid.routes";
 import dealRoutes from "../routes/deal.routes";
 import dealPdfRoutes from "../routes/dealPdfRoutes";
-import auctionRoutes from "../routes/auction.routes"
+import auctionRoutes from "../routes/auction.routes";
+import stripeRoutes from "../routes/stripe.routes";
+import escrowRoutes from "../routes/escrow.routes";
 import { protect } from "../middlewares/auth.middleware";
 import {kycVerifiedOnly} from "../middlewares/kyc.middleware";
 
@@ -27,5 +29,8 @@ router.use("/auctions" ,protect , kycVerifiedOnly , auctionRoutes);
 router.use("/bids" , protect , kycVerifiedOnly, bidRoutes);
 router.use("/deals" , protect , kycVerifiedOnly, dealRoutes);
 router.use("/deals" , protect , kycVerifiedOnly, dealPdfRoutes);
+router.use("/stripe", protect , kycVerifiedOnly ,stripeRoutes);
+router.use("/escrow" , protect , kycVerifiedOnly , escrowRoutes);
+
 
 export default router;

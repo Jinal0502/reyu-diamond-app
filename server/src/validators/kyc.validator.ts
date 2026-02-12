@@ -1,38 +1,65 @@
 import { z } from "zod";
 
+/* ================= SUBMIT KYC SCHEMA ================= */
 export const submitKycSchema = z.object({
   body: z.object({
-    firstName: z.string().min(1, "First name is required").max(50),
+    firstName: z
+      .string()
+      .nonempty("First name is required")
+      .max(50, "First name cannot exceed 50 characters"),
 
     middleName: z.string().max(50).optional(),
 
-    lastName: z.string().min(1, "Last name is required").max(50),
+    lastName: z
+      .string()
+      .nonempty("Last name is required")
+      .max(50, "Last name cannot exceed 50 characters"),
 
-    dob: z.string().refine((val) => !isNaN(Date.parse(val)), {
-      message: "Invalid DOB format",
-    }),
+    dob: z
+      .string()
+      .nonempty("DOB is required")
+      .refine((val) => !isNaN(Date.parse(val)), {
+        message: "Invalid DOB format",
+      }),
 
-    phone: z.string().regex(/^[6-9]\d{9}$/, "Invalid phone number"),
+    phone: z
+      .string()
+      .nonempty("Phone number is required")
+      .regex(/^[6-9]\d{9}$/, "Invalid phone number"),
 
-    residentialAddress: z.string().min(1, "Residential address is required"),
+    residentialAddress: z
+      .string()
+      .nonempty("Residential address is required"),
 
-    city: z.string().min(1, "City is required"),
+    city: z
+      .string()
+      .nonempty("City is required"),
 
-    state: z.string().min(1, "State is required"),
+    state: z
+      .string()
+      .nonempty("State is required"),
 
-    pincode: z.string().regex(/^\d{6}$/, "Invalid pincode"),
+    pincode: z
+      .string()
+      .nonempty("Pincode is required")
+      .regex(/^\d{6}$/, "Invalid pincode"),
 
     country: z.string().optional(),
 
-    aadhaarNo: z.string().regex(/^\d{12}$/, "Invalid Aadhaar number"),
+    aadhaarNo: z
+      .string()
+      .nonempty("Aadhaar number is required")
+      .regex(/^\d{12}$/, "Invalid Aadhaar number"),
 
     panNo: z
       .string()
+      .nonempty("PAN number is required")
       .regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, "Invalid PAN number")
       .transform((val) => val.toUpperCase()),
   }),
 });
 
+/* ================= VERIFY KYC SCHEMA ================= */
 export const verifyKycSchema = z.object({
   params: z.object({
     id: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid KYC ID"),
@@ -57,6 +84,7 @@ export const verifyKycSchema = z.object({
     ),
 });
 
+/* ================= GET KYCS SCHEMA ================= */
 export const getKycsSchema = z.object({
   query: z.object({
     page: z.string().optional(),
