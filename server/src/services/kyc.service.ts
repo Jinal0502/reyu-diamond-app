@@ -1,7 +1,7 @@
 import mongoose, { Types } from "mongoose";
 import { KYC } from "../models/Kyc.model";
 import { User } from "../models/User.model";
-import { deleteFolderByPrefix } from "../utils/cloundinary.delete";
+import { deleteSingleFile } from "../utils/cloundinary.delete";
 import crypto from "crypto";
 import { CustomError } from "../utils/customError.utility";
 
@@ -45,17 +45,21 @@ export const submitKyc = async (
 ) => {
   const userObjectId = new mongoose.Types.ObjectId(userId);
 
+  // 1. Fetch existing KYC
   const existing = await KYC.findOne({ userId: userObjectId });
 
   if (existing?.status === "approved") {
     throw new CustomError("KYC already approved", 400);
   }
 
-  // delete old files
-  if (existing) {
-    await deleteFolderByPrefix(`kyc/${userId}`);
-  }
+  // 2. Store old publicIds (for deletion later)
+  const oldPublicIds = {
+    aadhaar: existing?.documents?.aadhaar?.publicId,
+    pan: existing?.documents?.pan?.publicId,
+    selfie: existing?.documents?.selfie?.publicId,
+  };
 
+  // 3. Prepare update payload (new docs already uploaded)
   const updatePayload: any = {
     firstName: data.firstName,
     middleName: data.middleName,
@@ -69,7 +73,7 @@ export const submitKyc = async (
       city: data.address.city,
       state: data.address.state,
       pincode: data.address.pincode,
-      country: data.address.country,
+      country: data.address.country || "India",
     },
 
     documents: {
@@ -92,10 +96,39 @@ export const submitKyc = async (
     verifiedAt: undefined,
   };
 
-  return KYC.findOneAndUpdate({ userId: userObjectId }, updatePayload, {
-    upsert: true,
-    new: true,
-  });
+  // 4. Update Mongo first (VERY IMPORTANT)
+  const updatedKyc = await KYC.findOneAndUpdate(
+    { userId: userObjectId },
+    { $set: updatePayload },
+    { upsert: true, new: true }
+  );
+
+  // 5. Delete old files AFTER successful DB update
+  //    (so if upload fails, old docs are still safe)
+  if (existing) {
+    const deletePromises: Promise<void>[] = [];
+
+    if (oldPublicIds.aadhaar && oldPublicIds.aadhaar !== data.documents.aadhaar.publicId) {
+      deletePromises.push(deleteSingleFile(oldPublicIds.aadhaar));
+    }
+
+    if (oldPublicIds.pan && oldPublicIds.pan !== data.documents.pan.publicId) {
+      deletePromises.push(deleteSingleFile(oldPublicIds.pan));
+    }
+
+    if (
+      oldPublicIds.selfie &&
+      data.documents.selfie?.publicId &&
+      oldPublicIds.selfie !== data.documents.selfie.publicId
+    ) {
+      deletePromises.push(deleteSingleFile(oldPublicIds.selfie));
+    }
+
+    // delete all in parallel
+    await Promise.all(deletePromises);
+  }
+
+  return updatedKyc;
 };
 
 /* ================= VERIFY KYC ================= */

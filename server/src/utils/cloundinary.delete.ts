@@ -1,13 +1,18 @@
 import cloudinary from "../config/cloudinary";
 
-export const deleteSingleFile = async (
-  publicId: string,
-  resourceType: "image" | "video" | "raw" = "image"
-): Promise<void> => {
-  await cloudinary.uploader.destroy(publicId, {
-    resource_type: resourceType,
-    invalidate: true,
-  });
+export const deleteSingleFile = async (publicId: string): Promise<void> => {
+  const types: ("image" | "raw" | "video")[] = ["image", "raw", "video"];
+
+  for (const type of types) {
+    const res = await cloudinary.uploader.destroy(publicId, {
+      resource_type: type,
+      invalidate: true,
+    });
+
+    if (res.result === "ok") return;
+  }
+
+  console.log("Cloudinary delete failed for:", publicId);
 };
 
 
