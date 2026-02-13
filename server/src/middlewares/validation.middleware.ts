@@ -14,7 +14,6 @@ export const validate =
 
       next();
     } catch (err: any) {
-      console.log(err);
       if (err instanceof ZodError) {
         const errors = err.issues.map((issue) => ({
           field: issue.path.join("."), // example: body.name

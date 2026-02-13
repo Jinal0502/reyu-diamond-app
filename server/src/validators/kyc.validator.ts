@@ -1,73 +1,91 @@
 import { z } from "zod";
 
+/* ================= HELPER FOR REQUIRED STRING ================= */
+const requiredString = (fieldName: string, maxLen: number = 50) =>
+  z.preprocess(
+    (val) => (val === undefined || val === null ? "" : val),
+    z
+      .string()
+      .min(1, `${fieldName} is required`)
+      .max(maxLen, `${fieldName} cannot exceed ${maxLen} characters`)
+  );
+
 /* ================= SUBMIT KYC SCHEMA ================= */
 export const submitKycSchema = z.object({
   body: z.object({
-    firstName: z
-      .string()
-      .nonempty("First name is required")
-      .max(50, "First name cannot exceed 50 characters"),
+    firstName: requiredString("First name", 50),
 
-    middleName: z.string().max(50).optional(),
+    middleName: z.string().max(50, "Middle name cannot exceed 50 characters").optional(),
 
-    lastName: z
-      .string()
-      .nonempty("Last name is required")
-      .max(50, "Last name cannot exceed 50 characters"),
+    lastName: requiredString("Last name", 50),
 
-    dob: z
-      .string()
-      .nonempty("DOB is required")
-      .refine((val) => !isNaN(Date.parse(val)), {
-        message: "Invalid DOB format",
-      }),
+    dob: z.preprocess(
+      (val) => (val === undefined || val === null ? "" : val),
+      z
+        .string()
+        .min(1, "DOB is required")
+        .refine((val) => !isNaN(Date.parse(val)), {
+          message: "Invalid DOB format (use YYYY-MM-DD)",
+        })
+    ),
 
-    phone: z
-      .string()
-      .nonempty("Phone number is required")
-      .regex(/^[6-9]\d{9}$/, "Invalid phone number"),
+    phone: z.preprocess(
+      (val) => (val === undefined || val === null ? "" : val),
+      z
+        .string()
+        .min(1, "Phone number is required")
+        .regex(/^[6-9]\d{9}$/, "Invalid phone number")
+    ),
 
-    residentialAddress: z
-      .string()
-      .nonempty("Residential address is required"),
+    residentialAddress: requiredString("Residential address", 200),
 
-    city: z
-      .string()
-      .nonempty("City is required"),
+    city: requiredString("City", 50),
 
-    state: z
-      .string()
-      .nonempty("State is required"),
+    state: requiredString("State", 50),
 
-    pincode: z
-      .string()
-      .nonempty("Pincode is required")
-      .regex(/^\d{6}$/, "Invalid pincode"),
+    pincode: z.preprocess(
+      (val) => (val === undefined || val === null ? "" : val),
+      z
+        .string()
+        .min(1, "Pincode is required")
+        .regex(/^\d{6}$/, "Invalid pincode")
+    ),
 
     country: z.string().optional(),
 
-    aadhaarNo: z
-      .string()
-      .nonempty("Aadhaar number is required")
-      .regex(/^\d{12}$/, "Invalid Aadhaar number"),
+    aadhaarNo: z.preprocess(
+      (val) => (val === undefined || val === null ? "" : val),
+      z
+        .string()
+        .min(1, "Aadhaar number is required")
+        .regex(/^\d{12}$/, "Invalid Aadhaar number")
+    ),
 
-    panNo: z
-      .string()
-      .nonempty("PAN number is required")
-      .regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, "Invalid PAN number")
-      .transform((val) => val.toUpperCase()),
+    panNo: z.preprocess(
+      (val) => (val === undefined || val === null ? "" : val),
+      z
+        .string()
+        .min(1, "PAN number is required")
+        .regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, "Invalid PAN number")
+        .transform((val) => val.toUpperCase())
+    ),
   }),
 });
 
 /* ================= VERIFY KYC SCHEMA ================= */
 export const verifyKycSchema = z.object({
   params: z.object({
-    id: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid KYC ID"),
+    id: z
+      .string()
+      .regex(/^[0-9a-fA-F]{24}$/, "Invalid KYC ID"),
   }),
 
   body: z
     .object({
-      decision: z.enum(["approved", "rejected"]),
+      decision: z.enum(["approved", "rejected"], {
+        error: "Decision is required",
+      }),
+
       reason: z.string().optional(),
     })
     .refine(
