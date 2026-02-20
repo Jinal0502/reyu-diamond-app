@@ -7,13 +7,7 @@ export const getUserProfile = async (userId: string) => {
     throw new Error("USER_NOT_FOUND");
   }
 
-  return {
-    id: user._id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    isKycVerified: user.isKycVerified,
-  };
+  return { user };
 };
 
 export const updateUserProfile = async (

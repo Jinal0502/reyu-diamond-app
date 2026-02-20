@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import * as DealService from "../services/deal.service";
 import { sendResponse } from "../utils/api.response";
+import { CustomError } from "../utils/customError.utility";
 
 export const getDeal = async (
   req: Request,
@@ -37,66 +38,51 @@ export const listDeals = async (
   }
 };
 
-export const updateDealStatus = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const { status } = req.body;
-
-    if (!status) {
-      throw new Error("Status is required");
-    }
-
-    const deal = await DealService.updateDealStatusService(
-      req.params.dealId as string,
-      status,
-      req.user._id.toString(),
-      req.userRole
-    );
-
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Deal status updated successfully",
-      deal
-    );
-  } catch (error) {
-    next(error);
-  }
-};
-
 export const markShipped = async (req: any, res: Response, next: NextFunction) => {
   try {
+    const { courier, trackingNumber, note } = req.body;
+
     const deal = await DealService.updateDealStatusService(
       req.params.dealId,
       "SHIPPED",
       req.user._id.toString(),
-      req.userRole
+      req.userRole,
+      note,
+      { courier, trackingNumber }
     );
 
-    return sendResponse(res, 200, true, "Deal marked as shipped", deal);
+    res.status(200).json({
+      success: true,
+      message: "Deal marked as shipped",
+      data: deal,
+    });
   } catch (error) {
     next(error);
   }
 };
 
-export const markDelivered = async (req: any, res: Response, next: NextFunction) => {
+export const confirmDelivered = async (req: any, res: Response, next: NextFunction) => {
   try {
+    const { note } = req.body;
+
     const deal = await DealService.updateDealStatusService(
       req.params.dealId,
       "DELIVERED",
       req.user._id.toString(),
-      req.userRole
+      req.userRole,
+      note
     );
 
-    return sendResponse(res, 200, true, "Deal marked as delivered", deal);
+    res.status(200).json({
+      success: true,
+      message: "Delivery confirmed",
+      data: deal,
+    });
   } catch (error) {
     next(error);
   }
 };
+
 
 export const cancelDeal = async (req: any, res: Response, next: NextFunction) => {
   try {

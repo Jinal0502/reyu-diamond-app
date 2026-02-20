@@ -21,8 +21,11 @@ export const stripeWebhookController = async (req: Request, res: Response) => {
 
   try {
     switch (event.type) {
+
       case "payment_intent.succeeded": {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
+
+        if(paymentIntent.status !== "succeeded") break;
 
         const escrow = await Escrow.findOne({
           stripePaymentIntentId: paymentIntent.id,
@@ -30,13 +33,24 @@ export const stripeWebhookController = async (req: Request, res: Response) => {
 
         if (!escrow) break;
 
+        if(escrow.status === "HELD") break;
+
         escrow.status = "HELD";
         await escrow.save();
 
-        // ✅ Update Deal status
-        await Deal.findByIdAndUpdate(escrow.dealId, {
-          status: "IN_ESCROW",
-        });
+        // Update Deal status
+        const deal = await Deal.findById(escrow.dealId);
+
+        if(deal && deal.status !== "IN_ESCROW") {
+
+          deal.status = "IN_ESCROW",
+          deal.history.push({
+            status : "IN_ESCROW",
+            changedBy : deal.buyerId as any,
+            changedAt : new Date(),
+          });
+          await deal.save();
+        }
 
         break;
       }
@@ -50,13 +64,22 @@ export const stripeWebhookController = async (req: Request, res: Response) => {
 
         if (!escrow) break;
 
+        if(escrow.status === "FAILED") break;
+
         escrow.status = "FAILED";
         await escrow.save();
 
         // ✅ Update Deal status
-        await Deal.findByIdAndUpdate(escrow.dealId, {
-          status: "PAYMENT_FAILED",
-        });
+        const deal = await Deal.findById(escrow.dealId);
+        if (deal && deal.status !== "PAYMENT_FAILED") {
+          deal.status = "PAYMENT_FAILED";
+          deal.history.push({
+            status: "PAYMENT_FAILED",
+            changedBy: deal.buyerId as any,
+            changedAt: new Date(),
+          });
+          await deal.save();
+        }
 
         break;
       }
@@ -74,6 +97,23 @@ export const stripeWebhookController = async (req: Request, res: Response) => {
 
         escrow.stripeChargeId = charge.id;
         await escrow.save();
+
+        break;
+      }
+      case "charge.succeeded": {
+        const charge = event.data.object as Stripe.Charge;
+        const paymentIntentId = charge.payment_intent as string;
+
+        const escrow = await Escrow.findOne({
+          stripePaymentIntentId: paymentIntentId,
+        });
+
+        if (!escrow) break;
+
+        if (!escrow.stripeChargeId) {
+          escrow.stripeChargeId = charge.id;
+          await escrow.save();
+        }
 
         break;
       }

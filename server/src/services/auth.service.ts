@@ -1,4 +1,5 @@
 import { User } from "../models/User.model";
+import { KYC } from "../models/Kyc.model";
 import { sendEmail } from "../services/email.service";
 import {
   otpEmailTemplate,
@@ -14,6 +15,7 @@ interface LoginResult {
   role: string;
   isKycVerified: boolean;
   isEmailVerified: boolean;
+  kycStatus : string;
 }
 
 export const registerUser = async (
@@ -98,13 +100,13 @@ export const loginUser = async (
   );
 
   if (!user) {
-    throw new CustomError("Invalid email or password" , 401);
+    throw new CustomError("Invalid email or password", 401);
   }
 
   const isMatch = await user.comparePassword(password);
 
   if (!isMatch) {
-    throw new CustomError("Invalid email or password" , 401);
+    throw new CustomError("Invalid email or password", 401);
   }
 
   // if email not verified send otp again
@@ -124,8 +126,11 @@ export const loginUser = async (
       });
     }
 
-    throw new CustomError("Email not verified. OTP sent to your email." , 403);
+    throw new CustomError("Email not verified. OTP sent to your email.", 403);
   }
+
+  
+  const kyc = await KYC.findOne({ userId: user._id }).select("status");
 
   return {
     _id: user._id.toString(),
@@ -134,6 +139,9 @@ export const loginUser = async (
     role: user.role,
     isKycVerified: user.isKycVerified,
     isEmailVerified: user.isEmailVerified,
+
+    // if kyc is not found return "NOT_SUBMITTED" (or null)
+    kycStatus: kyc?.status || "not_submitted",
   };
 };
 

@@ -15,6 +15,9 @@ import auctionRoutes from "../routes/auction.routes";
 import stripeRoutes from "../routes/stripe.routes";
 import escrowRoutes from "../routes/escrow.routes";
 import chatRoutes from "../routes/chat.routes";
+import ratingRoutes from "../routes/rating.routes";
+import badgeRoutes from "../routes/badge.routes";
+import adRoutes from "../routes/advertisement.routes";
 import { protect } from "../middlewares/auth.middleware";
 import {kycVerifiedOnly} from "../middlewares/kyc.middleware";
 
@@ -33,5 +36,8 @@ router.use("/deals" , protect , kycVerifiedOnly, dealPdfRoutes);
 router.use("/stripe", protect , kycVerifiedOnly ,stripeRoutes);
 router.use("/escrow" , protect , kycVerifiedOnly , escrowRoutes);
 router.use("/chats" , protect , kycVerifiedOnly , chatRoutes);
+router.use("/ratings" , ratingRoutes);
+router.use("/badges" , badgeRoutes);
+router.use("/ads" , adRoutes);
 
 export default router;

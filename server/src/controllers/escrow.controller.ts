@@ -2,18 +2,18 @@ import { Request , Response , NextFunction } from "express";
 import { createPaymentIntentForDealService , releaseEscrowService } from "../services/escrow.service";
 import { sendResponse } from "../utils/api.response";
 
-export const createPaymentIntentForDeal = async (req: any, res: Response) => {
+export const createPaymentIntentForDeal = async (req: any, res: Response , next : NextFunction) => {
   try {
     const buyerId = req.user._id;
-    const { dealId } = req.body;
+    const { dealId , note } = req.body;
 
-    const data = await createPaymentIntentForDealService(dealId, buyerId);
+    const data = await createPaymentIntentForDealService(dealId, buyerId , note);
 
 
     return sendResponse(res , 201 , true , "PaymentIntent created successfully" , data);
   } 
   catch (error: any) {
-    nextTick(error);
+    next(error);
   }
 };
 
@@ -24,11 +24,13 @@ export const releaseEscrow = async (
 ) => {
   try {
     const dealId = req.params.dealId;
+    const { note } = req.body;
 
     const result = await releaseEscrowService(
       dealId,
       req.user._id.toString(),
-      req.userRole
+      req.userRole,
+      note
     );
 
     return sendResponse(res, 200, true, "Payment released successfully", result);
@@ -36,4 +38,3 @@ export const releaseEscrow = async (
     next(error);
   }
 };
-

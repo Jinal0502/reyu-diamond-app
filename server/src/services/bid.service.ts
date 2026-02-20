@@ -25,30 +25,29 @@ export const createBidService = async ({
     session.startTransaction();
 
     try {
-      // 1. Fetch auction
       const auction = await Auction.findById(auctionId).session(session);
       if (!auction) throw new Error("Auction not found");
 
-      // 2. Validate auction status
-      if (auction.status !== "active") throw new Error("Auction is not active");
-      const now = new Date();
-      if (now < new Date(auction.startDate)) throw new Error("Auction not started");
-      if (now > new Date(auction.endDate)) throw new Error("Auction has ended");
+      if (auction.status !== "active")
+        throw new Error("Auction is not active");
 
-      // 3. Prevent seller from bidding
-      if (auction.sellerId.toString() === buyerId.toString())
+      const now = new Date();
+      if (now < new Date(auction.startDate))
+        throw new Error("Auction not started");
+      if (now > new Date(auction.endDate))
+        throw new Error("Auction has ended");
+
+      if (auction.sellerId.toString() === buyerId)
         throw new Error("You cannot bid on your own auction");
 
-      // 4. Prevent self-outbidding
-      if (auction.highestBidderId?.toString() === buyerId.toString())
+      if (auction.highestBidderId?.toString() === buyerId)
         throw new Error("You already have the highest bid");
 
-      // 5. Check bid amount
       const currentPrice = auction.currentBid ?? auction.basePrice;
       if (bidAmount <= currentPrice)
         throw new Error(`Bid must be higher than ${currentPrice}`);
 
-      // 6. Create bid initially as isHighestBid = false to avoid unique index conflict
+      // Create bid temporarily not highest
       const [bid] = await Bid.create(
         [
           {
@@ -56,19 +55,17 @@ export const createBidService = async ({
             buyerId,
             bidAmount,
             status: "ACTIVE",
-            isHighestBid: false, // temporarily false
+            isHighestBid: false,
           },
         ],
         { session }
       );
 
-      if (!bid) throw new Error("Failed to create bid");
-
-      // 7. Atomic auction update
+      // Atomic auction update (race protection)
       const updatedAuction = await Auction.findOneAndUpdate(
         {
           _id: auction._id,
-          currentBid: currentPrice, // ensures no race condition
+          currentBid: currentPrice,
         },
         {
           $set: {
@@ -82,14 +79,13 @@ export const createBidService = async ({
       );
 
       if (!updatedAuction) {
-        // Conflict happened, retry
         await session.abortTransaction();
         session.endSession();
         attempt++;
-        continue; // retry automatically
+        continue;
       }
 
-      // 8. Demote previous highest bids (mark as REJECTED)
+      // Demote previous highest (DO NOT reject them)
       await Bid.updateMany(
         {
           auctionId,
@@ -97,16 +93,13 @@ export const createBidService = async ({
           isHighestBid: true,
           status: "ACTIVE",
         },
-        { $set: { isHighestBid: false, status: "REJECTED" } },
+        { $set: { isHighestBid: false } },
         { session }
       );
 
-      // 9. Promote current bid as highest
-      await Bid.findByIdAndUpdate(
-        bid._id,
-        { isHighestBid: true },
-        { session }
-      );
+      // Promote current bid
+      bid.isHighestBid = true;
+      await bid.save({ session });
 
       await session.commitTransaction();
       session.endSession();
@@ -116,22 +109,20 @@ export const createBidService = async ({
       await session.abortTransaction();
       session.endSession();
 
-      // Handle unique index or conflict errors
       if (
-        error.message.includes("Bid conflict") ||
-        error.message.includes("Duplicate value")
+        error.code === 11000 || // unique index
+        error.message.includes("Duplicate")
       ) {
         attempt++;
-        continue; // retry automatically
+        continue;
       }
 
       throw error;
     }
   }
 
-  // After retries
   throw new Error(
-    "Bid conflict persisted. Please check the latest bid and try again."
+    "Bid conflict persisted. Please check latest bid and try again."
   );
 };
 
@@ -148,9 +139,8 @@ export const updateBidStatusService = async (
     const bid = await Bid.findById(bidId).session(session);
     if (!bid) throw new Error("Bid not found");
 
-    if (bid.status !== "ACTIVE") {
+    if (bid.status !== "ACTIVE")
       throw new Error("Only active bids can be updated");
-    }
 
     const auction = await Auction.findById(bid.auctionId).session(session);
     if (!auction) throw new Error("Auction not found");
@@ -158,17 +148,15 @@ export const updateBidStatusService = async (
     const isOwner = auction.sellerId.toString() === userId;
     const isAdmin = userRole === "admin";
 
-    if (!isOwner && !isAdmin) {
+    if (!isOwner && !isAdmin)
       throw new Error("Access denied");
-    }
 
-    let deal: any = null; // store created deal
+    let deal: any = null;
 
     switch (action) {
       case "ACCEPT": {
-        if (auction.status !== "active") {
+        if (auction.status !== "active")
           throw new Error("Auction is not active");
-        }
 
         // Reject all other active bids
         await Bid.updateMany(
@@ -181,9 +169,9 @@ export const updateBidStatusService = async (
           { session }
         );
 
-        // Accept selected bid
+        // Accept selected bid (KEEP highest true)
         bid.status = "ACCEPTED";
-        bid.isHighestBid = false;
+        bid.isHighestBid = true;
         await bid.save({ session });
 
         // End auction
@@ -195,10 +183,7 @@ export const updateBidStatusService = async (
         auction.currentBid = bid.bidAmount;
         await auction.save({ session });
 
-        // Update inventory
-        const inventory = await Inventory.findById(auction.inventoryId).session(
-          session
-        );
+        const inventory = await Inventory.findById(auction.inventoryId).session(session);
         if (!inventory) throw new Error("Inventory not found");
 
         inventory.status = "on_memo";
@@ -206,11 +191,10 @@ export const updateBidStatusService = async (
         inventory.price = bid.bidAmount;
         await inventory.save({ session });
 
-        // Create deal (IMPORTANT: must be inside transaction)
         deal = await createDealService(
           bid._id.toString(),
           auction.sellerId.toString(),
-          session // pass session
+          session
         );
 
         break;
@@ -218,29 +202,27 @@ export const updateBidStatusService = async (
 
       case "REJECT":
       case "EXPIRE": {
+        const wasHighest = bid.isHighestBid;
+
         bid.status = action === "REJECT" ? "REJECTED" : "EXPIRED";
         bid.isHighestBid = false;
         await bid.save({ session });
 
-        // if rejected/expired bid was highest, update auction to latest highest active bid
-        if (auction.highestBidId?.toString() === bid._id.toString()) {
-          const newHighestBid = await Bid.findOne({
+        if (wasHighest) {
+          const newHighest = await Bid.findOne({
             auctionId: auction._id,
             status: "ACTIVE",
           })
             .sort({ bidAmount: -1, createdAt: -1 })
             .session(session);
 
-          if (newHighestBid) {
-            auction.highestBidId = newHighestBid._id;
-            auction.highestBidderId = newHighestBid.buyerId;
-            auction.currentBid = newHighestBid.bidAmount;
+          if (newHighest) {
+            newHighest.isHighestBid = true;
+            await newHighest.save({ session });
 
-            await Bid.updateOne(
-              { _id: newHighestBid._id },
-              { $set: { isHighestBid: true } },
-              { session }
-            );
+            auction.highestBidId = newHighest._id;
+            auction.highestBidderId = newHighest.buyerId;
+            auction.currentBid = newHighest.bidAmount;
           } else {
             auction.highestBidId = undefined;
             auction.highestBidderId = undefined;
@@ -260,7 +242,6 @@ export const updateBidStatusService = async (
     await session.commitTransaction();
     session.endSession();
 
-    // ✅ return both bid and deal
     return { bid, deal };
   } catch (error) {
     await session.abortTransaction();
@@ -278,9 +259,10 @@ export const getBidsByAuctionService = async (auctionId: string) => {
 export const getHighestBidByAuctionService = async (auctionId: string) => {
   return Bid.findOne({
     auctionId,
-    isHighestBid: true,
-    status: "ACTIVE",
-  }).populate("buyerId", "name email");
+    status : {$in : ["ACTIVE" , "ACCEPTED"]},
+  })
+    .sort({bidAmount : -1})
+    .populate("buyerId", "name email");
 };
 
 export const getMyBidService = async (auctionId: string, buyerId: string) => {

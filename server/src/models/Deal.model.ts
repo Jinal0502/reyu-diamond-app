@@ -37,8 +37,6 @@ export interface IDeal extends Document {
   payment: {
     isPaid: boolean;
     paidAt?: Date;
-    method?: string;
-    transactionId?: string;
   };
 
   shipping?: {
@@ -65,6 +63,7 @@ export interface IDeal extends Document {
     status: DealStatus;
     changedBy: Types.ObjectId;
     changedAt: Date;
+    note : String;
   }[];
 
   pdfPath?: string;
@@ -105,17 +104,7 @@ const DealSchema = new Schema<IDeal>(
 
     status: {
       type: String,
-      enum: [
-        "CREATED",
-        "PAYMENT_PENDING",
-        "PAYMENT_FAILED",
-        "IN_ESCROW",
-        "SHIPPED",
-        "DELIVERED",
-        "COMPLETED",
-        "DISPUTED",
-        "CANCELLED",
-      ],
+      enum: Object.keys(DEAL_TRANSITIONS),
       default: "CREATED",
       index: true,
     },
@@ -123,8 +112,6 @@ const DealSchema = new Schema<IDeal>(
     payment: {
       isPaid: { type: Boolean, default: false },
       paidAt: Date,
-      method: String,
-      transactionId: String,
     },
 
     shipping: {
@@ -163,6 +150,7 @@ const DealSchema = new Schema<IDeal>(
         status: { type: String, required: true },
         changedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
         changedAt: { type: Date, default: Date.now },
+        note : {type : String}
       },
     ],
 

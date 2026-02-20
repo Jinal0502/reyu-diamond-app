@@ -2,6 +2,18 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 import bcrypt from "bcryptjs";
 import { isValidEmail } from "../utils/email.validator";
 
+export interface IUserStats {
+  averageRating : number;
+  totalRatings : number;
+  reputationScore : number;
+  badgeCount : number;
+
+  completedDeals : number;
+  cancelDeals : number;
+  totalVolume : number;
+  totalShipments : number;
+}
+
 export interface IUser extends Document {
   name: string;
   email: string;
@@ -20,6 +32,8 @@ export interface IUser extends Document {
   stripeOnboardingStatus?: "NOT_CREATED" | "PENDING" | "COMPLETED";
   stripeChargesEnabled?: boolean;
   stripePayoutsEnabled?: boolean;
+
+  stats : IUserStats;
 
   comparePassword(enteredPassword: string): Promise<boolean>;
 }
@@ -105,6 +119,18 @@ const userSchema: Schema<IUser> = new Schema(
       type: Boolean,
       default: false,
     },
+
+    stats : {
+      averageRating : {type : Number , default : 0 , min : 0 , max : 5},
+      totalRatings : { type : Number , default : 0 , min : 0},
+      reputationScore: { type: Number, default: 0, min: 0, max: 1000 },
+      badgeCount: { type: Number, default: 0, min: 0 },
+
+      completedDeals: { type: Number, default: 0, min: 0 },
+      canceledDeals: { type: Number, default: 0, min: 0 },
+      totalVolume: { type: Number, default: 0, min: 0 },
+      totalShipments: { type: Number, default: 0, min: 0 },
+    }
   },
   { timestamps: true }
 );

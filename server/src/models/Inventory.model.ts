@@ -38,7 +38,7 @@ export interface IInventory extends Document {
 
   // Pricing
   price: number;             // final / buy-now price
-  startingPrice?: number;    // OPTIONAL – only for auction
+  startingPrice: number;    // OPTIONAL – only for auction
   currency: string;
 
   // State
@@ -142,6 +142,7 @@ const InventorySchema = new Schema<IInventory>(
     startingPrice: {
       type: Number,
       min: 0,
+      required : true
     },
 
     currency: {

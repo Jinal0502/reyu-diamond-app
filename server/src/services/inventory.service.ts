@@ -136,14 +136,14 @@ export const replaceMedia = async (
       // delete old image from cloudinary
       const oldImageUrl = inventory.images[index];
       const oldPublicId = getPublicIdFromUrl(oldImageUrl);
-      await deleteSingleFile(oldPublicId, "image");
+      await deleteSingleFile(oldPublicId);
 
       inventory.images[index] = images[0];
     } else {
       // delete all old images
       for (const imgUrl of inventory.images) {
         const publicId = getPublicIdFromUrl(imgUrl);
-        await deleteSingleFile(publicId, "image");
+        await deleteSingleFile(publicId);
       }
 
       inventory.images = images;
@@ -154,7 +154,7 @@ export const replaceMedia = async (
   if (video) {
     if (inventory.video) {
       const oldVideoPublicId = getPublicIdFromUrl(inventory.video);
-      await deleteSingleFile(oldVideoPublicId, "video");
+      await deleteSingleFile(oldVideoPublicId);
     }
 
     inventory.video = video;
@@ -191,7 +191,7 @@ export const removeMedia = async (
   if (removeAllImages && inventory.images.length > 0) {
     for (const imgUrl of inventory.images) {
       const publicId = getPublicIdFromUrl(imgUrl);
-      await deleteSingleFile(publicId, "image");
+      await deleteSingleFile(publicId);
     }
 
     inventory.images = [];
@@ -200,7 +200,7 @@ export const removeMedia = async (
   // ✅ remove video only
   if (removeVideo && inventory.video) {
     const publicId = getPublicIdFromUrl(inventory.video);
-    await deleteSingleFile(publicId, "video");
+    await deleteSingleFile(publicId);
 
     inventory.video = undefined;
   }

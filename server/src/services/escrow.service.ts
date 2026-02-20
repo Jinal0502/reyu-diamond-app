@@ -7,7 +7,8 @@ import { CustomError } from "../utils/customError.utility";
 
 export const createPaymentIntentForDealService = async (
   dealId: string,
-  buyerId: string
+  buyerId: string,
+  note?: string,
 ) => {
   const deal = await Deal.findById(dealId);
 
@@ -22,8 +23,6 @@ export const createPaymentIntentForDealService = async (
   if (!seller) throw new Error("Seller not found");
 
   if (!seller.stripeAccountId) throw new Error("Seller Stripe account not found");
-
-  if (!seller.isKycVerified) throw new Error("Seller KYC not verified");
 
   let escrow = await Escrow.findOne({ dealId });
 
@@ -61,8 +60,15 @@ export const createPaymentIntentForDealService = async (
     await escrow.save();
   }
 
-  // ✅ Update Deal Status
+  // Update Deal Status
   deal.status = "PAYMENT_PENDING";
+
+  deal.history.push({
+      status: "PAYMENT_PENDING",
+      changedBy: buyerId as any,
+      changedAt: new Date(),
+      note : note || "",
+  });
   await deal.save();
 
   return {
@@ -75,73 +81,63 @@ export const createPaymentIntentForDealService = async (
 export const releaseEscrowService = async (
   dealId: string,
   userId: string,
-  role: string
+  role: string,
+  note?: string,
 ) => {
+  const deal = await Deal.findById(dealId);
+  if(!deal) throw new CustomError("Deal not found" , 404);
+
+  const escrow = await Escrow.findOne({dealId});
+  if(!escrow) throw new CustomError("Escrow not found" , 404);
+
+  if(escrow.status === "RELEASED"){
+    throw new CustomError("Escrow already Released");
+  }
+
+  const isBuyer = deal.buyerId.toString() === userId;
+  const isAdmin = role === "admin";
+
+  if(!isBuyer && !isAdmin){
+    throw new CustomError("Only buyer/admin can release escrow");
+  }
+
+  if(!deal.buyerConfirmedDelivered){
+     throw new CustomError("Buyer confirmation required");
+  }
+
+  if(escrow.status !== "HELD"){
+    throw new CustomError("Escrow must be HELD");
+  }
+  const seller = await User.findById(deal.sellerId);
+  if(!seller?.stripeAccountId){
+    throw new CustomError("Seller Stripe account missing");
+  }
+
+  const transfer = await stripe.transfers.create({
+    amount : Math.round(escrow.amount * 100),
+    currency : escrow.currency,
+    destination : seller.stripeAccountId,
+    transfer_group : `deal${dealId}`,
+    metadata : {
+      dealId,
+      escrowId: escrow._id.toString(),
+    },
+  });
+  
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const deal = await Deal.findById(dealId).session(session);
-    if (!deal) throw new Error("Deal not found");
-
-    const escrow = await Escrow.findOne({ dealId }).session(session);
-    if (!escrow) throw new Error("Escrow not found");
-
-    const isBuyer = deal.buyerId.toString() === userId;
-    const isAdmin = role === "admin";
-
-    if (!isBuyer && !isAdmin) {
-      throw new Error("Only buyer/admin can release escrow");
-    }
-
-    // must be delivered
-    if (deal.status !== "DELIVERED") {
-      throw new Error("Deal must be DELIVERED before releasing payment");
-    }
-
-    // buyer confirmation must be true (if you added fields)
-    if (!deal.buyerConfirmedDelivered) {
-      throw new Error("Buyer confirmation is required");
-    }
-
-    // escrow must be held
-    if (escrow.status !== "HELD") {
-      throw new Error("Escrow is not in HELD status");
-    }
-
-    const seller = await User.findById(deal.sellerId).session(session);
-    if (!seller) throw new Error("Seller not found");
-
-    if (!seller.stripeAccountId) {
-      throw new Error("Seller Stripe account not found");
-    }
-
-    // Create Stripe Transfer
-    const transfer = await stripe.transfers.create({
-      amount: Math.round(escrow.amount * 100),
-      currency: escrow.currency,
-      destination: seller.stripeAccountId,
-      transfer_group: seller.stripeAccountId,
-      metadata: {
-        dealId: dealId.toString(),
-        escrowId: escrow._id.toString(),
-        sellerId: seller._id.toString(),
-      },
-    });
-
-    // Update escrow
     escrow.status = "RELEASED";
     escrow.stripeTransferId = transfer.id;
     await escrow.save({ session });
 
-    // Update deal
     deal.status = "COMPLETED";
-    deal.payment.isPaid = true;
-
     deal.history.push({
       status: "COMPLETED",
       changedBy: userId as any,
       changedAt: new Date(),
+      note: note || "",
     });
 
     await deal.save({ session });
@@ -159,71 +155,53 @@ export const releaseEscrowService = async (
     session.endSession();
     throw error;
   }
+
 };
 
 
 export const refundEscrowService = async (
   dealId: string,
   userId: string,
-  role: string
+  role: string,
+  note?: string
 ) => {
+  const deal = await Deal.findById(dealId);
+  if (!deal) throw new Error("Deal not found");
+
+  const escrow = await Escrow.findOne({ dealId });
+  if (!escrow) throw new Error("Escrow not found");
+
+  if (escrow.status !== "HELD") {
+    throw new Error("Refund allowed only if HELD");
+  }
+
+  const isAdmin = role === "admin";
+  if (!isAdmin) {
+    throw new Error("Only admin can approve refund");
+  }
+
+  const refund = await stripe.refunds.create({
+    charge: escrow.stripeChargeId,
+    metadata: {
+      dealId,
+      escrowId: escrow._id.toString(),
+    },
+  });
+
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const deal = await Deal.findById(dealId).session(session);
-    if (!deal) throw new Error("Deal not found");
-
-    const escrow = await Escrow.findOne({ dealId }).session(session);
-    if (!escrow) throw new Error("Escrow not found");
-
-    const isBuyer = deal.buyerId.toString() === userId;
-    const isAdmin = role === "admin";
-
-    // Only buyer or admin can request refund
-    if (!isBuyer && !isAdmin) {
-      throw new Error("Only buyer/admin can request refund");
-    }
-
-    // If already released, refund is not possible automatically
-    if (escrow.status === "RELEASED") {
-      throw new Error("Refund not possible because funds already transferred to seller");
-    }
-
-    // Refund allowed only if escrow is HELD
-    if (escrow.status !== "HELD") {
-      throw new Error(`Refund not allowed. Escrow status is ${escrow.status}`);
-    }
-
-    // Must have chargeId or paymentIntentId
-    if (!escrow.stripeChargeId && !escrow.stripePaymentIntentId) {
-      throw new Error("ChargeId or PaymentIntentId missing for refund");
-    }
-
-    // Create Stripe Refund
-    const refund = await stripe.refunds.create({
-      charge: escrow.stripeChargeId, // best option
-      payment_intent: escrow.stripeChargeId ? undefined : escrow.stripePaymentIntentId,
-      metadata: {
-        dealId: dealId.toString(),
-        escrowId: escrow._id.toString(),
-        buyerId: deal.buyerId.toString(),
-      },
-    });
-
-    // Update escrow
     escrow.status = "REFUNDED";
     escrow.stripeRefundId = refund.id;
     await escrow.save({ session });
 
-    // Update deal status to CANCELLED
     deal.status = "CANCELLED";
-    deal.payment.isPaid = false;
-
     deal.history.push({
       status: "CANCELLED",
       changedBy: userId as any,
       changedAt: new Date(),
+      note: note || "",
     });
 
     await deal.save({ session });
@@ -242,4 +220,3 @@ export const refundEscrowService = async (
     throw error;
   }
 };
-
