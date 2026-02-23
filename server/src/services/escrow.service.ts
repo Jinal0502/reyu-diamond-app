@@ -4,30 +4,37 @@ import { stripe } from "../config/stripe";
 import { User } from "../models/User.model";
 import mongoose from "mongoose";
 import { CustomError } from "../utils/customError.utility";
+import {
+  handleSellerDealCompleted,
+  handleBuyerDealCompleted,
+  handleDealCancelled,
+} from "./user-stats.service";
+
+/* =======================================================
+   CREATE PAYMENT INTENT
+======================================================= */
 
 export const createPaymentIntentForDealService = async (
   dealId: string,
   buyerId: string,
-  note?: string,
+  note?: string
 ) => {
   const deal = await Deal.findById(dealId);
-
-  if (!deal) throw new Error("Deal not found");
+  if (!deal) throw new CustomError("Deal not found", 404);
 
   if (deal.buyerId.toString() !== buyerId.toString()) {
-    throw new Error("You are not authorized as buyer for this deal");
+    throw new CustomError("Unauthorized buyer", 403);
   }
 
   const seller = await User.findById(deal.sellerId);
-
-  if (!seller) throw new Error("Seller not found");
-
-  if (!seller.stripeAccountId) throw new Error("Seller Stripe account not found");
+  if (!seller?.stripeAccountId) {
+    throw new CustomError("Seller Stripe account missing", 400);
+  }
 
   let escrow = await Escrow.findOne({ dealId });
 
   if (escrow && escrow.status !== "FAILED" && escrow.status !== "CANCELLED") {
-    throw new Error("Escrow already exists for this deal");
+    throw new CustomError("Escrow already exists", 400);
   }
 
   const amountInCents = Math.round(deal.dealAmount * 100);
@@ -36,10 +43,10 @@ export const createPaymentIntentForDealService = async (
     amount: amountInCents,
     currency: "usd",
     payment_method_types: ["card"],
-    transfer_group : `deal${dealId}`,
+    transfer_group: `deal_${dealId}`,
     metadata: {
-      dealId: dealId.toString(),
-      buyerId: buyerId.toString(),
+      dealId,
+      buyerId,
       sellerId: deal.sellerId.toString(),
     },
   });
@@ -60,15 +67,14 @@ export const createPaymentIntentForDealService = async (
     await escrow.save();
   }
 
-  // Update Deal Status
   deal.status = "PAYMENT_PENDING";
-
   deal.history.push({
-      status: "PAYMENT_PENDING",
-      changedBy: buyerId as any,
-      changedAt: new Date(),
-      note : note || "",
+    status: "PAYMENT_PENDING",
+    changedBy: buyerId as any,
+    changedAt: new Date(),
+    note: note || "",
   });
+
   await deal.save();
 
   return {
@@ -78,52 +84,54 @@ export const createPaymentIntentForDealService = async (
   };
 };
 
+/* =======================================================
+   RELEASE ESCROW (SUCCESSFUL COMPLETION)
+======================================================= */
+
 export const releaseEscrowService = async (
   dealId: string,
   userId: string,
   role: string,
-  note?: string,
+  note?: string
 ) => {
   const deal = await Deal.findById(dealId);
-  if(!deal) throw new CustomError("Deal not found" , 404);
+  if (!deal) throw new CustomError("Deal not found", 404);
 
-  const escrow = await Escrow.findOne({dealId});
-  if(!escrow) throw new CustomError("Escrow not found" , 404);
+  const escrow = await Escrow.findOne({ dealId });
+  if (!escrow) throw new CustomError("Escrow not found", 404);
 
-  if(escrow.status === "RELEASED"){
-    throw new CustomError("Escrow already Released");
+  if (escrow.status !== "HELD") {
+    throw new CustomError("Escrow must be HELD", 400);
   }
 
   const isBuyer = deal.buyerId.toString() === userId;
   const isAdmin = role === "admin";
 
-  if(!isBuyer && !isAdmin){
-    throw new CustomError("Only buyer/admin can release escrow");
+  if (!isBuyer && !isAdmin) {
+    throw new CustomError("Only buyer/admin can release escrow", 403);
   }
 
-  if(!deal.buyerConfirmedDelivered){
-     throw new CustomError("Buyer confirmation required");
+  if (!deal.buyerConfirmedDelivered) {
+    throw new CustomError("Buyer confirmation required", 400);
   }
 
-  if(escrow.status !== "HELD"){
-    throw new CustomError("Escrow must be HELD");
-  }
   const seller = await User.findById(deal.sellerId);
-  if(!seller?.stripeAccountId){
-    throw new CustomError("Seller Stripe account missing");
+  if (!seller?.stripeAccountId) {
+    throw new CustomError("Seller Stripe account missing", 400);
   }
 
+  // Stripe transfer
   const transfer = await stripe.transfers.create({
-    amount : Math.round(escrow.amount * 100),
-    currency : escrow.currency,
-    destination : seller.stripeAccountId,
-    transfer_group : `deal${dealId}`,
-    metadata : {
+    amount: Math.round(escrow.amount * 100),
+    currency: escrow.currency,
+    destination: seller.stripeAccountId,
+    transfer_group: `deal_${dealId}`,
+    metadata: {
       dealId,
       escrowId: escrow._id.toString(),
     },
   });
-  
+
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -145,6 +153,10 @@ export const releaseEscrowService = async (
     await session.commitTransaction();
     session.endSession();
 
+    // ✅ Stats update AFTER commit
+    await handleSellerDealCompleted(deal.sellerId, deal.dealAmount);
+    await handleBuyerDealCompleted(deal.buyerId);
+
     return {
       deal,
       escrow,
@@ -155,9 +167,11 @@ export const releaseEscrowService = async (
     session.endSession();
     throw error;
   }
-
 };
 
+/* =======================================================
+   REFUND ESCROW (ADMIN ONLY)
+======================================================= */
 
 export const refundEscrowService = async (
   dealId: string,
@@ -166,22 +180,21 @@ export const refundEscrowService = async (
   note?: string
 ) => {
   const deal = await Deal.findById(dealId);
-  if (!deal) throw new Error("Deal not found");
+  if (!deal) throw new CustomError("Deal not found", 404);
 
   const escrow = await Escrow.findOne({ dealId });
-  if (!escrow) throw new Error("Escrow not found");
+  if (!escrow) throw new CustomError("Escrow not found", 404);
 
   if (escrow.status !== "HELD") {
-    throw new Error("Refund allowed only if HELD");
+    throw new CustomError("Refund allowed only if HELD", 400);
   }
 
-  const isAdmin = role === "admin";
-  if (!isAdmin) {
-    throw new Error("Only admin can approve refund");
+  if (role !== "admin") {
+    throw new CustomError("Only admin can approve refund", 403);
   }
 
   const refund = await stripe.refunds.create({
-    charge: escrow.stripeChargeId,
+    payment_intent: escrow.stripePaymentIntentId,
     metadata: {
       dealId,
       escrowId: escrow._id.toString(),
@@ -208,6 +221,12 @@ export const refundEscrowService = async (
 
     await session.commitTransaction();
     session.endSession();
+
+    await handleDealCancelled({
+      cancelledBy: new mongoose.Types.ObjectId(userId),
+      buyerId: deal.buyerId,
+      sellerId: deal.sellerId,
+    });
 
     return {
       deal,

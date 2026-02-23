@@ -63,7 +63,7 @@ export interface IDeal extends Document {
     status: DealStatus;
     changedBy: Types.ObjectId;
     changedAt: Date;
-    note : String;
+    note?: String;
   }[];
 
   pdfPath?: string;

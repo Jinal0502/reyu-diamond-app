@@ -4,6 +4,7 @@ import { Deal } from "../models/Deal.model";
 import { User } from "../models/User.model";
 import { CustomError } from "../utils/customError.utility";
 import { updateBadgesForUser } from "./badge.service";
+import { handleRatingSubmitted} from "./user-stats.service";
 
 interface CreateRatingInput {
   userId: string | Types.ObjectId;
@@ -89,30 +90,7 @@ export const createRatingService = async ({
   });
 
   // update user rating stats
-  const stats = await Rating.aggregate([
-    { $match: { userId: targetUserId } },
-    {
-      $group: {
-        _id: "$userId",
-        avg: { $avg: "$rating" },
-        total: { $sum: 1 },
-      },
-    },
-  ]);
-
-  const avgRating = stats.length ? stats[0].avg : 0;
-  const totalRatings = stats.length ? stats[0].total : 0;
-
-  await User.findByIdAndUpdate(targetUserId, {
-    $set: {
-      "stats.averageRating": Number(avgRating.toFixed(2)),
-      "stats.totalRatings": totalRatings,
-    },
-  });
-
-  // update badges
-  await updateBadgesForUser(targetUserId);
-
+  await handleRatingSubmitted(targetUserId);
   return created;
 };
 

@@ -6,7 +6,7 @@ import { Auction } from "../models/Auction.model";
 import { Inventory } from "../models/Inventory.model";
 import Escrow from "../models/Escrow.model";
 import { releaseEscrowService , refundEscrowService } from "../services/escrow.service";
-import { updateBadgesForUser } from "./badge.service";
+import { handleDealCancelled} from "./user-stats.service";
 
 /**
  * Deal will be created automatically when bid is ACCEPTED
@@ -90,13 +90,17 @@ export const updateDealStatusService = async (
   const session = await mongoose.startSession();
   session.startTransaction();
 
+  let sellerIdForStats: mongoose.Types.ObjectId | null = null;
+
   try {
     const deal = await Deal.findById(dealId).session(session);
     if (!deal) throw new Error("Deal not found");
 
     const allowed = DEAL_TRANSITIONS[deal.status];
     if (!allowed.includes(newStatus)) {
-      throw new Error(`Invalid transition from ${deal.status} to ${newStatus}`);
+      throw new Error(
+        `Invalid transition from ${deal.status} to ${newStatus}`
+      );
     }
 
     const isSeller = deal.sellerId.toString() === userId;
@@ -116,6 +120,7 @@ export const updateDealStatusService = async (
           trackingNumber: shippingData?.trackingNumber,
           shippedAt: new Date(),
         };
+
         break;
 
       case "DELIVERED":
@@ -261,6 +266,12 @@ export const cancelDealService = async (
 
     await session.commitTransaction();
     session.endSession();
+    
+    await handleDealCancelled({
+      cancelledBy: userId as any,
+      buyerId: deal.buyerId,
+      sellerId: deal.sellerId
+    });
 
     return {
       deal,

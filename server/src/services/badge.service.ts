@@ -82,8 +82,25 @@ export const getUserBadgesService = async (userId: Types.ObjectId) => {
   const userBadges = await UserBadge.find({ userId }).sort({ createdAt: -1 });
   const badgeMaster = await Badge.find({ isActive: true });
 
-  return {
-    badgeMaster,
-    userBadges,
-  };
+  const userBadgeMap = new Map(
+    userBadges.map((b) => [b.badgeId, b])
+  );
+
+  const merged = badgeMaster.map((badge) => {
+    const userBadge = userBadgeMap.get(badge.badgeId);
+    return {
+      badgeId: badge.badgeId,
+      name: badge.name,
+      description: badge.description,
+      icon: badge.icon,
+      tier: badge.tier,
+
+      isEarned: userBadge ? userBadge.isEarned : false,
+      earnedAt: userBadge ? userBadge.earnedAt : null,
+
+      progress: userBadge ? userBadge.progress : { current: 0, target: badge.criteria?.target || 1, percentage: 0 },
+    };
+  });
+
+  return merged;
 };

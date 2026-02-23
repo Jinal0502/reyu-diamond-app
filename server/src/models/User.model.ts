@@ -127,7 +127,7 @@ const userSchema: Schema<IUser> = new Schema(
       badgeCount: { type: Number, default: 0, min: 0 },
 
       completedDeals: { type: Number, default: 0, min: 0 },
-      canceledDeals: { type: Number, default: 0, min: 0 },
+      cancelDeals: { type: Number, default: 0, min: 0 },
       totalVolume: { type: Number, default: 0, min: 0 },
       totalShipments: { type: Number, default: 0, min: 0 },
     }

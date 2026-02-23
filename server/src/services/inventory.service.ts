@@ -30,6 +30,7 @@ const getPublicIdFromUrl = (url: string): string => {
 /* ================= CREATE ================= */
 
 export const createInventory = async (data: Partial<IInventory>) => {
+  
   if (!data.sellerId) throw new Error("Seller ID is required");
 
   data.status = "available";
