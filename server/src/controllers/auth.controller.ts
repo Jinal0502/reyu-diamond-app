@@ -1,8 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import * as AuthService from "../services/auth.service";
-import { sendResponse } from "../utils/api.response";
-import { generateToken } from "../utils/generate.token";
-import isEmail from "validator/lib/isEmail";
+import {sendResponse , generateToken} from "../utils/index"
 
 export const register = async (req: Request, res: Response , next : any) => {
   try {

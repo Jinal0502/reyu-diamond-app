@@ -9,28 +9,20 @@ export const deleteSingleFile = async (publicId: string): Promise<void> => {
       invalidate: true,
     });
 
-    if (res.result === "ok") return;
+    if (res.result === "ok") return; // stop on first successful deletion
   }
 
-  console.log("Cloudinary delete failed for:", publicId);
+  console.warn("Cloudinary delete failed for:", publicId);
 };
 
 
 export const deleteFolderByPrefix = async (prefix: string): Promise<void> => {
-  // delete all images
-  await cloudinary.api.delete_resources_by_prefix(prefix, {
-    resource_type: "image",
-  });
-
-  // delete all videos
-  await cloudinary.api.delete_resources_by_prefix(prefix, {
-    resource_type: "video",
-  });
-
-  // delete all raw
-  await cloudinary.api.delete_resources_by_prefix(prefix, {
-    resource_type: "raw",
-  });
+  // delete all resources in parallel
+  await Promise.all([
+    cloudinary.api.delete_resources_by_prefix(prefix, { resource_type: "image" }),
+    cloudinary.api.delete_resources_by_prefix(prefix, { resource_type: "video" }),
+    cloudinary.api.delete_resources_by_prefix(prefix, { resource_type: "raw" }),
+  ]);
 
   // delete folder (ignore 404)
   try {

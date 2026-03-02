@@ -20,10 +20,6 @@ export const createDealService = async (
   const bid = await Bid.findById(bidId).session(session);
   if (!bid) throw new Error("Bid not found");
 
-  if (bid.status !== "ACCEPTED") {
-    throw new Error("Only accepted bids can create deal");
-  }
-
   const auction = await Auction.findById(bid.auctionId).session(session);
   if (!auction) throw new Error("Auction not found");
 
@@ -41,9 +37,6 @@ export const createDealService = async (
   if (existingDeal) throw new Error("Deal already exists for this bid");
 
   // Inventory must already be moved to memo by bid accept logic
-  if (inventory.status !== "on_memo") {
-    throw new Error("Inventory must be on memo before deal creation");
-  }
 
   const [deal] = await Deal.create(
     [

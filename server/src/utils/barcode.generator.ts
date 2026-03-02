@@ -1,7 +1,6 @@
 import crypto from "crypto";
 
-export const generateBarcode = (): string => {
-
-    const random = crypto.randomBytes(4).toString("hex").toUpperCase();
-    return `DIA-${random}`;
-}
+export const generateBarcode = (length = 4): string => {
+  const random = crypto.randomBytes(length).toString("hex").toUpperCase();
+  return `DIA-${random}`;
+};

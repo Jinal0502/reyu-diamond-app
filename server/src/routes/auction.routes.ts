@@ -8,6 +8,7 @@ const router = express.Router();
 
 // PUBLIC
 router.get("/", AuctionController.getAuctions);
+router.get("/my-auctions",  AuctionController.getMyAuctions);
 router.get("/:auctionId", AuctionController.getAuctionById);
 
 // PROTECTED
@@ -18,20 +19,6 @@ router.put(
   protect,
   ownerOrRole(Auction, "sellerId", [], "auctionId"),
   AuctionController.updateAuction
-);
-
-router.patch(
-  "/:auctionId/status",
-  protect,
-  ownerOrRole(Auction, "sellerId", [], "auctionId"),
-  AuctionController.updateAuctionStatus
-);
-
-router.patch(
-  "/:auctionId/auto-close",
-  protect,
-  ownerOrRole(Auction, "sellerId", [], "auctionId"),
-  AuctionController.closeAuctionAutomatically
 );
 
 router.delete(

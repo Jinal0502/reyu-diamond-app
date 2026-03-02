@@ -1,13 +1,16 @@
 import express, { type Application, type Request, type Response , type NextFunction } from "express";
 import dotenv from "dotenv";
 import http from "http";
+import helmet from "helmet";
 import { Server } from "socket.io";
 import { setupSocket } from "./socket/socket";
+import { apiLimiter } from "./middlewares/rateLimit.middleware";
 import connectDB from "./config/db.js";
 import cors , { CorsOptions } from "cors";
 import routes from "./routes/index.routes.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
 import { stripeWebhookController } from "./controllers/stripe.webhook.controller.js";
+import { initAuctionCron } from "./cron/auction.cron.js";
 
 dotenv.config();
 connectDB();
@@ -16,7 +19,7 @@ const app: Application = express();
 
 // CORS options
 const corsOptions: CorsOptions = {
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: process.env.CORS_ORIGIN || 'http://localhost:8080',
   credentials: true
 };
 
@@ -31,8 +34,13 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use(helmet());
+
+app.use(apiLimiter);
+
 // CORS middleware
 app.use(cors(corsOptions));
+
 
 // File size error handling
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -48,6 +56,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     message: err.message
   });
 });
+
 
 // API routes
 app.use("/api/reyu-diamond/", routes);
@@ -77,4 +86,5 @@ setupSocket(io);
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  initAuctionCron();
 });

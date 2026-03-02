@@ -1,170 +1,129 @@
-import mongoose , {Schema , Document , Types} from "mongoose";
-import { maxLength } from "zod";
+import mongoose, { Schema, Document, Model, Types } from "mongoose";
 
-export type AdPlacement = "HOME_BANNER" | "SEARCH_SIDEBAR" | "LISTING_TOP" | "FOOTER";
-
-export type AdStatus = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+export type MediaType = "image" | "video";
+export type AdStatus = "PENDING" | "APPROVED" | "REJECTED" | "DISABLED";
+export type BannerSection =
+  | "HOME_DASHBOARD"
+  | "MARKETPLACE"
+  | "BANNER_ZONES";
 
 export interface IAdvertisement extends Document {
+  advertiserId: Types.ObjectId;
+  inventoryId?: Types.ObjectId;
 
-    userId : Types.ObjectId,
+  title: string;
+  description?: string;
 
-    title : string;
-    description : string;
-    imageUrl : string;
+  mediaUrl: string;
+  mediaType: MediaType;
 
-    linkUrl?: string;
+  ctaLink?: string;
 
-    duration : number;
-    placement : AdPlacement;
+  bannerSection: BannerSection[];
 
-    status : AdStatus;
+  status: AdStatus;
+  rejectionReason?: string;
 
-    estimatedCost : number;
-    priority : number;
+  startDate?: Date;
+  endDate?: Date;
 
-    startDate? : Date;
-    endDate?: Date;
-
-    impressions: number;
-    clicks : number;
-
-    approvedBy?: Types.ObjectId;
-    approvedAt?: Date;
-
-    rejectedBy?: Types.ObjectId;
-    rejectedAt?: Date;
-    rejectionReason?: string;
-
-    submittedAt : Date;
-
-    createdAt : Date;
-    updatedAt : Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const AdvertisementSchema = new Schema<IAdvertisement>(
-    {
-        userId : {
-            type : Schema.Types.ObjectId,
-            ref : "User",
-            required : true,
-            index : true,
-        },
-        title : {
-            type : String,
-            required : true,
-            minLength : 5,
-            maxLength : 100,
-            trim : true
-        },
-        description : {
-            type : String,
-            required : true,
-            minLength : 10,
-            maxLength : 500,
-            trim : true
-        },
-
-        imageUrl : { type : String , required : true},
-
-        linkUrl : {
-            type : String,
-            trim : true,
-            validate : {
-                validator : function(v : string) {
-                    return !v || /^https?:\/\/.+/.test(v);
-                },
-                message : "Invalid URL format"
-            },
-        },
-
-        duration : {
-            type : Number,
-            required : true,
-            min : 7,
-            max : 90
-        },
-
-        placement : {
-            type : String,
-            enum : ["HOME_BANNER" , "SERACH_SIDEBAR" , "LISTING_TOP" , "FOOTER"],
-            required : true,
-            index : true,
-        },
-        status : {
-            type : String,
-            enum : ["PENDING" , "APPROVED" , "REJECTED" , "EXPIRED"],
-            default : "PENDING",
-            index : true,
-        },
-
-        estimatedCost : {
-            type : Number,
-            required : true,
-            min : 0,
-        },
-
-        priority : {
-            type : Number,
-            min : 1,
-            max : 10,
-            default : 5,
-        },
-        startDate : {
-            type : Date,
-            default : null,
-        },
-        endDate : {
-            type : Date,
-            default : null,
-        },
-        impressions : {
-            type : Number,
-            default : 0,
-            min : 0,
-        },
-        clicks : {
-            type : Number,
-            default : 0,
-            min : 0,
-        },
-        approvedBy : {
-            type : Schema.Types.ObjectId,
-            ref : "User",
-            default : null
-        },
-        approvedAt : {
-            type : Date,
-            default : null,
-        },
-        rejectedBy : {
-            type : Schema.Types.ObjectId,
-            ref : "User",
-            default : null
-        },
-        rejectedAt : {
-            type : Date,
-            default : null,
-        },
-        rejectionReason : {
-            type : String,
-            maxLength : 500,
-            trim : true
-        },
-        submittedAt : {
-            type : Date,
-            default : Date.now,
-        },
+  {
+    advertiserId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
     },
-    {timestamps : true}
+
+    inventoryId: {
+      type: Schema.Types.ObjectId,
+      ref: "Inventory",
+      default: null,
+    },
+
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+      minlength: 5,
+      maxlength: 120,
+    },
+
+    description: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+    },
+
+    mediaUrl: {
+      type: String,
+      required: true,
+    },
+
+    mediaType: {
+      type: String,
+      enum: ["image", "video"],
+      required: true,
+      index: true,
+    },
+
+    ctaLink: {
+      type: String,
+      trim: true,
+      validate: {
+        validator: function (v: string) {
+          return !v || /^https?:\/\/.+/.test(v);
+        },
+        message: "Invalid URL format",
+      },
+    },
+
+    bannerSection: {
+      type: [String],
+      enum: ["HOME_DASHBOARD", "MARKETPLACE", "BANNER_ZONES"],
+      default: ["BANNER_ZONES"],
+      index: true,
+    },
+
+    status: {
+      type: String,
+      enum: ["PENDING", "APPROVED", "REJECTED", "DISABLED"],
+      default: "PENDING",
+      index: true,
+    },
+
+    rejectionReason: {
+      type: String,
+      maxlength: 500,
+      trim: true,
+    },
+
+    startDate: {
+      type: Date,
+      default: null,
+    },
+
+    endDate: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    timestamps: true,
+  }
 );
 
-AdvertisementSchema.index({ status: 1, startDate: 1 });
-AdvertisementSchema.index({ userId: 1, status: 1 });
-AdvertisementSchema.index({ placement: 1, status: 1 });
-AdvertisementSchema.index({ priority: -1, startDate: -1 });
+/* ---------- Indexes (IMPORTANT for ads performance) ---------- */
 
-export const Advertisement = mongoose.model<IAdvertisement>(
-  "Advertisement",
-  AdvertisementSchema
-);
+AdvertisementSchema.index({ status: 1, startDate: 1, endDate: 1 });
+AdvertisementSchema.index({ bannerSection: 1, status: 1 });
+AdvertisementSchema.index({ advertiserId: 1, status: 1 });
+
+export const Advertisement: Model<IAdvertisement> =
+  mongoose.models.Advertisement ||
+  mongoose.model<IAdvertisement>("Advertisement", AdvertisementSchema);

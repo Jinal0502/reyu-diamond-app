@@ -5,5 +5,7 @@ const router = Router();
 
 router.get("/profile" , UserController.getProfile);
 router.put("/profile" , UserController.updateProfile);
+router.post("/fcm-token", UserController.saveFcmToken);
+
 
 export default router;

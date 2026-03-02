@@ -80,6 +80,7 @@ const AuctionSchema: Schema<IAuction> = new Schema(
     startDate: {
       type: Date,
       required: true,
+      index: true,
     },
 
     endDate: {
@@ -113,6 +114,7 @@ const AuctionSchema: Schema<IAuction> = new Schema(
   }
 );
 
+AuctionSchema.index({ status: 1 , startDate: 1 });
 AuctionSchema.index({ status: 1, endDate: 1 });
 
 export const Auction: Model<IAuction> =

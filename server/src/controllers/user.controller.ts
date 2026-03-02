@@ -45,3 +45,20 @@ export const updateProfile = async (req: any, res: Response ,next : any) => {
      next(err);
   }
 };
+
+export const saveFcmToken = async (req: any, res: Response) => {
+  try {
+    const { fcmToken } = req.body;
+
+    const tokens = await UserService.saveFcmTokenService(
+      req.user._id,
+      fcmToken
+    );
+
+    return sendResponse(res , 200 , true , "FCM token stored successfully" , {fcmTokens : tokens})
+
+  } catch (error: any) {
+
+    return sendResponse(res , 500 , false , "Failed to store FCM token");
+  }
+};

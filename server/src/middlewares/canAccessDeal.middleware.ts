@@ -20,7 +20,7 @@ export const canAccessDeal = async (
     }
 
     const deal = await Deal.findById(dealId).select("buyerId sellerId");
-    console.log("Fetched deal for access check:", deal);
+    
     if (!deal) {
       return sendResponse(res, 404, false, "Deal not found");
     }

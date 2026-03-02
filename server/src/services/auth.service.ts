@@ -5,8 +5,7 @@ import {
   otpEmailTemplate,
   passwordResetOtpTemplate,
 } from "../utils/templates/email.template";
-import { setUserOtp } from "../utils/otp.utils";
-import { CustomError } from "../utils/customError.utility";
+import { setUserOtp , CustomError } from "../utils/index";
 
 interface LoginResult {
   _id: string;

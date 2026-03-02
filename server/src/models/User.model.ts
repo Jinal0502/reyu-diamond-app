@@ -28,7 +28,7 @@ export interface IUser extends Document {
   isKycVerified: boolean;
 
   stripeAccountId?: string;
-
+  fcmTokens?: string[];
   stripeOnboardingStatus?: "NOT_CREATED" | "PENDING" | "COMPLETED";
   stripeChargesEnabled?: boolean;
   stripePayoutsEnabled?: boolean;
@@ -102,6 +102,11 @@ const userSchema: Schema<IUser> = new Schema(
       type: String,
       trim: true,
       default: null,
+    },
+
+    fcmTokens: {
+      type: [String],
+      default: [],
     },
 
     stripeOnboardingStatus: {

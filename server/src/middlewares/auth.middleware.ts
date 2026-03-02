@@ -20,7 +20,7 @@ export const protect = async(
 
         if(!authHeader || !authHeader.startsWith("Bearer ")){
 
-            return sendResponse(res , 200  , false , "Unauthorized")
+            return sendResponse(res , 401 , false , "Unauthorized")
         }
 
         const token = authHeader.split(" ")[1];

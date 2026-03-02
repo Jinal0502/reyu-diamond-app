@@ -51,7 +51,8 @@ const storage = new CloudinaryStorage({
 export const inventoryUpload = multer({
   storage,
   limits: {
-    fileSize: 50 * 1024 * 1024, // 20MB
+    fileSize: 50 * 1024 * 1024,
+    files: 5 // 50MB
   },
 
   // ✅ ONLY mime-type validation (no filename restriction)

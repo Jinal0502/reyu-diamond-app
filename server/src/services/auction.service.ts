@@ -1,9 +1,6 @@
 import mongoose from "mongoose";
 import { Inventory } from "../models/Inventory.model";
 import { Auction, IAuction } from "../models/Auction.model";
-import { createDealService } from "./deal.service";
-
-export type AuctionAction = "START" | "END" | "CANCEL";
 
 interface CreateAuctionInput {
   inventoryId: string;
@@ -21,9 +18,9 @@ export const createAuctionService = async ({
   endDate,
   userId,
 }: CreateAuctionInput): Promise<IAuction> => {
-  const useTransaction = process.env.NODE_ENV === "production";
-  const session = useTransaction ? await mongoose.startSession() : null;
-  if (session) session.startTransaction();
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
     const inventory = await Inventory.findById(inventoryId).session(session);
@@ -47,10 +44,11 @@ export const createAuctionService = async ({
 
     const existingAuction = await Auction.findOne({
       inventoryId,
-      status: { $ne: "cancelled" },
+      status: { $in: ["upcoming", "active"] },
     }).session(session);
 
-    if (existingAuction) throw new Error("Auction already exists for this inventory");
+    if (existingAuction)
+      throw new Error("Auction already exists for this inventory");
 
     const auction = await Auction.create(
       [
@@ -74,24 +72,20 @@ export const createAuctionService = async ({
     inventory.listedAt = new Date();
     await inventory.save({ session });
 
-    if (session) {
-      await session.commitTransaction();
-      session.endSession();
-    }
+    await session.commitTransaction();
+    session.endSession();
 
-    if (!auction[0]) throw new Error("Failed to create auction");
     return auction[0];
+
   } catch (error) {
-    if (session) {
-      await session.abortTransaction();
-      session.endSession();
-    }
+    await session.abortTransaction();
+    session.endSession();
     throw error;
   }
 };
 
-// GET AUCTIONS
-export const getAuctionsService = async (filters: any = {}): Promise<IAuction[]> => {
+// GET
+export const getAuctionsService = async (filters: any = {}) => {
   return Auction.find(filters)
     .populate("inventoryId")
     .populate("sellerId", "name email")
@@ -99,8 +93,7 @@ export const getAuctionsService = async (filters: any = {}): Promise<IAuction[]>
     .sort({ endDate: 1 });
 };
 
-// GET AUCTION BY ID
-export const getAuctionByIdService = async (auctionId: string): Promise<IAuction> => {
+export const getAuctionByIdService = async (auctionId: string) => {
   const auction = await Auction.findById(auctionId)
     .populate("inventoryId")
     .populate("sellerId", "name email")
@@ -112,15 +105,15 @@ export const getAuctionByIdService = async (auctionId: string): Promise<IAuction
   return auction;
 };
 
-// UPDATE AUCTION
+// UPDATE
 export const updateAuctionService = async (
   auctionId: string,
   updates: { startDate?: Date; endDate?: Date; basePrice?: number }
-): Promise<IAuction> => {
+) => {
   const auction = await Auction.findById(auctionId).populate("inventoryId");
   if (!auction) throw new Error("Auction not found");
 
-  if (auction.status !== "upcoming" || auction.locked)
+  if (auction.status !== "upcoming")
     throw new Error("Auction cannot be updated after it starts");
 
   if (auction.bidIds.length > 0)
@@ -153,97 +146,11 @@ export const updateAuctionService = async (
   return auction;
 };
 
-// UPDATE AUCTION STATUS
-export const updateAuctionStatusService = async (
-  auctionId: string,
-  action: AuctionAction
-): Promise<IAuction> => {
-  const useTransaction = process.env.NODE_ENV === "production";
-  const session = useTransaction ? await mongoose.startSession() : null;
-  if (session) session.startTransaction();
+// DELETE
+export const deleteAuctionService = async (auctionId: string) => {
 
-  try {
-    const auction = await Auction.findById(auctionId).session(session);
-    if (!auction) throw new Error("Auction not found");
-
-    const inventory = await Inventory.findById(auction.inventoryId).session(session);
-    if (!inventory) throw new Error("Inventory not found");
-
-    switch (action) {
-      case "START":
-        if (auction.status !== "upcoming")
-          throw new Error("Only upcoming auctions can be started");
-
-        if (new Date() < new Date(auction.startDate))
-          throw new Error("Auction start date has not arrived yet");
-
-        auction.status = "active";
-        break;
-
-      case "END":
-        if (auction.status !== "active")
-          throw new Error("Only active auctions can be ended");
-
-        auction.status = "ended";
-        auction.locked = true;
-        auction.endedAt = new Date();
-
-        inventory.status = "sold"; // OR "deal_created"
-        inventory.locked = true;
-        await inventory.save({ session });
-
-        // Create Deal if highest bid exists
-        if (auction.highestBidId) {
-          await createDealService(
-            auction.highestBidId.toString(),
-            auction.sellerId.toString(),
-            session as mongoose.mongo.ClientSession
-  );
-}
-
-
-        break;
-
-      case "CANCEL":
-        if (auction.status === "ended")
-          throw new Error("Cannot cancel ended auction");
-
-        auction.status = "cancelled";
-        auction.locked = true;
-        auction.cancelledAt = new Date();
-
-        inventory.status = "available";
-        inventory.locked = false;
-        await inventory.save({ session });
-
-        break;
-
-      default:
-        throw new Error("Invalid auction action");
-    }
-
-    await auction.save({ session });
-
-    if (session) {
-      await session.commitTransaction();
-      session.endSession();
-    }
-
-    return auction;
-  } catch (error) {
-    if (session) {
-      await session.abortTransaction();
-      session.endSession();
-    }
-    throw error;
-  }
-};
-
-// DELETE AUCTION
-export const deleteAuctionService = async (auctionId: string): Promise<void> => {
-  const useTransaction = process.env.NODE_ENV === "production";
-  const session = useTransaction ? await mongoose.startSession() : null;
-  if (session) session.startTransaction();
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
     const auction = await Auction.findById(auctionId).session(session);
@@ -260,54 +167,9 @@ export const deleteAuctionService = async (auctionId: string): Promise<void> => 
 
     await Auction.findByIdAndDelete(auctionId, { session });
 
-    if (session) {
-      await session.commitTransaction();
-      session.endSession();
-    }
-  } catch (error) {
-    if (session) {
-      await session.abortTransaction();
-      session.endSession();
-    }
-    throw error;
-  }
-};
-
-// AUTO CLOSE AUCTION
-export const closeAuctionAutomatically = async (auctionId: string): Promise<IAuction> => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    const auction = await Auction.findById(auctionId).session(session);
-    if (!auction) throw new Error("Auction not found");
-
-    if (auction.status !== "active") {
-      await session.commitTransaction();
-      session.endSession();
-      return auction;
-    }
-
-    const now = new Date();
-    if (auction.endDate > now) throw new Error("Auction has not ended yet");
-
-    auction.status = "ended";
-    auction.locked = true;
-    auction.endedAt = now;
-    await auction.save({ session });
-
-    if (auction.highestBidId) {
-      await createDealService(
-        auction.highestBidId.toString(),
-        auction.sellerId.toString(),
-        session
-      );
-    }
-
     await session.commitTransaction();
     session.endSession();
 
-    return auction;
   } catch (error) {
     await session.abortTransaction();
     session.endSession();

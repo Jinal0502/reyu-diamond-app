@@ -1,111 +1,173 @@
-import {Types} from "mongoose";
+import { Types } from "mongoose";
 import { Advertisement } from "../models/Advertisement.model";
 import { CustomError } from "../utils/customError.utility";
 
+  //  REQUEST AD
+
 interface RequestAdInput {
-    userId : Types.ObjectId;
-    payload : any;
+  advertiserId: Types.ObjectId;
+  payload: any;
 }
 
-export const requestAdService = async({userId , payload} : RequestAdInput) => {
+export const requestAdService = async ({
+  advertiserId,
+  payload,
+}: RequestAdInput) => {
+  const {
+    title,
+    description,
+    mediaUrl,
+    mediaType,
+    ctaLink,
+    bannerSection,
+    startDate,
+    endDate,
+  } = payload;
 
-    const {title , description , imageUrl , linkUrl , duration , placement} = payload;
+  if (!title || !mediaUrl || !mediaType) {
+    throw new CustomError("Required fields missing", 400);
+  }
 
-    if(!title || !description || !imageUrl || !duration || !placement){
-        throw new CustomError("All required fields must be provided" , 400);
-    }
+  const ad = await Advertisement.create({
+    advertiserId,
+    title,
+    description,
+    mediaUrl,
+    mediaType,
+    ctaLink,
+    bannerSection,
+    startDate,
+    endDate,
+    status: "PENDING",
+  });
 
-    const baseRate = 1000;
-    const placementMultiplier: Record<string, number> = {
-        HOME_BANNER: 3,
-        SEARCH_SIDEBAR: 2,
-        LISTING_TOP: 2.5,
-        FOOTER: 1,
-    };
-
-    const multiplier = placementMultiplier[placement] || 1;
-    const estimatedCost = baseRate * multiplier * duration;
-
-    const ad = await Advertisement.create({
-        userId,
-        title,
-        description,
-        imageUrl,
-        linkUrl,
-        duration,
-        placement,
-        estimatedCost,
-        status : "PENDING",
-        priority : 5,
-        submittedAt : new Date(),
-    });
-
-    return ad;
-}
-
-export const getActiveAdsService = async() => {
-
-    const now = new Date();
-
-    const ads = await Advertisement.find({
-        status : "APPROVED",
-        startDate : {$lte : now},
-        endDate : {$gte : now},
-    })
-      .sort({priority : -1 , createdAt : -1})
-      .select("-imageUrl");
-    
-    return ads;
+  return ad;
 };
 
-interface ApproveAdInput {
-    adId : Types.ObjectId;
-    adminId : Types.ObjectId;
-    payload : any;
+  //  GET USER ADS
+
+export const getUserAdsService = async (advertiserId: Types.ObjectId) => {
+  return Advertisement.find({ advertiserId }).sort({ createdAt: -1 });
+};
+
+  //  GET ACTIVE ADS (FOR SERVING)
+
+export const getActiveAdsService = async (section?: string) => {
+  const now = new Date();
+
+  const filter: any = {
+    status: "APPROVED",
+    $and: [
+      {
+        $or: [{ startDate: null }, { startDate: { $lte: now } }],
+      },
+      {
+        $or: [{ endDate: null }, { endDate: { $gte: now } }],
+      },
+    ],
+  };
+
+  if (section) {
+    filter.bannerSection = section;
+  }
+
+  const ads = await Advertisement.find(filter).sort({
+    createdAt: -1,
+  });
+
+  return ads;
+};
+
+  //  GET AD BY ID
+
+export const getAdByIdService = async (adId: Types.ObjectId) => {
+  const ad = await Advertisement.findById(adId);
+
+  if (!ad) throw new CustomError("Advertisement not found", 404);
+
+  return ad;
+};
+
+  //  ADMIN UPDATE STATUS
+
+interface UpdateStatusInput {
+  adId: Types.ObjectId;
+  adminId: Types.ObjectId;
+  payload: any;
 }
 
-export const approveAdService = async({adId , adminId , payload} : ApproveAdInput) => {
+export const updateAdStatusService = async ({
+  adId,
+  adminId,
+  payload,
+}: UpdateStatusInput) => {
+  const { action, rejectionReason } = payload;
 
-    const {action , rejectionReason , priority} = payload;
+  const ad = await Advertisement.findById(adId);
 
-    const ad = await Advertisement.findById(adId);
-    if(!ad) throw new CustomError("Advertisement not found" , 404);
+  if (!ad) throw new CustomError("Advertisement not found", 404);
 
-    if (ad.status !== "PENDING") {
-        throw new Error("Only PENDING ads can be approved/rejected");
-    }
+  if (!["APPROVE", "REJECT", "DISABLE"].includes(action)) {
+    throw new CustomError("Invalid action", 400);
+  }
 
-    if (!action || !["APPROVE", "REJECT"].includes(action)) {
-        throw new Error("action must be APPROVE or REJECT");
-    }
+  if (action === "APPROVE") {
+    ad.status = "APPROVED";
+    ad.rejectionReason = undefined;
+  }
 
-    if (action === "REJECT" && !rejectionReason) {
-        throw new Error("rejectionReason is required for rejection");
-    }
+  if (action === "REJECT") {
+    if (!rejectionReason)
+      throw new CustomError("rejectionReason required", 400);
 
-    if (action === "APPROVE") {
-        const startDate = new Date();
-        const endDate = new Date();
-        endDate.setDate(startDate.getDate() + ad.duration);
+    ad.status = "REJECTED";
+    ad.rejectionReason = rejectionReason;
+  }
 
-        ad.status = "APPROVED";
-        ad.approvedBy = adminId;
-        ad.approvedAt = new Date();
-        ad.startDate = startDate;
-        ad.endDate = endDate;
+  if (action === "DISABLE") {
+    ad.status = "DISABLED";
+  }
 
-        if (priority) ad.priority = priority;
-    }
+  await ad.save();
 
-    if (action === "REJECT") {
-        ad.status = "REJECTED";
-        ad.rejectedBy = adminId;
-        ad.rejectedAt = new Date();
-        ad.rejectionReason = rejectionReason;
-    }
+  return ad;
+};
 
-    await ad.save();
+   //CLICK AD (SECURE REDIRECT)
 
-    return ad;
-
+interface ClickAdInput {
+  adId: Types.ObjectId;
+  currentUserId?: Types.ObjectId;
 }
+
+export const clickAdService = async ({
+  adId,
+  currentUserId,
+}: ClickAdInput) => {
+  const ad = await Advertisement.findById(adId);
+
+  if (!ad) throw new CustomError("Advertisement not found", 404);
+
+  /* ---------- STATUS CHECK ---------- */
+  if (ad.status !== "APPROVED") {
+    throw new CustomError("Ad not active", 400);
+  }
+
+  const now = new Date();
+
+  /* ---------- DATE CHECK ---------- */
+  if (ad.startDate && ad.startDate > now) {
+    throw new CustomError("Campaign not started", 400);
+  }
+
+  if (ad.endDate && ad.endDate < now) {
+    throw new CustomError("Campaign expired", 400);
+  }
+
+  /* ---------- CTA CHECK ---------- */
+  if (!ad.ctaLink) {
+    throw new CustomError("Redirect link missing", 400);
+  }
+
+  return ad.ctaLink;
+};

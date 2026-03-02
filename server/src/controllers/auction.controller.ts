@@ -36,6 +36,20 @@ export const getAuctions = async (req: Request, res: Response, next: NextFunctio
   }
 };
 
+export const getMyAuctions = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user._id;
+
+    const auctions = await AuctionService.getAuctionsService({
+      sellerId: userId,
+    });
+
+    return sendResponse(res, 200, true, "My auctions fetched successfully", auctions);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getAuctionById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const auctionId = req.params.auctionId as string;
@@ -46,6 +60,8 @@ export const getAuctionById = async (req: Request, res: Response, next: NextFunc
     next(error);
   }
 };
+
+
 
 export const updateAuction = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -63,19 +79,6 @@ export const updateAuction = async (req: Request, res: Response, next: NextFunct
   }
 };
 
-export const updateAuctionStatus = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const auctionId = req.params.auctionId as string;
-    const { action } = req.body;
-
-    const auction = await AuctionService.updateAuctionStatusService(auctionId, action);
-
-    return sendResponse(res, 200, true, "Auction status updated successfully", auction);
-  } catch (error) {
-    next(error);
-  }
-};
-
 export const deleteAuction = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const auctionId = req.params.auctionId as string;
@@ -88,14 +91,3 @@ export const deleteAuction = async (req: Request, res: Response, next: NextFunct
   }
 };
 
-export const closeAuctionAutomatically = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const auctionId = req.params.auctionId as string;
-
-    const auction = await AuctionService.closeAuctionAutomatically(auctionId);
-
-    return sendResponse(res, 200, true, "Auction closed successfully", auction);
-  } catch (error) {
-    next(error);
-  }
-};

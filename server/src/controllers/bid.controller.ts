@@ -15,7 +15,7 @@ export const createBid = async (
       auctionId,
       buyerId,
       bidAmount,
-    });
+  });
 
     return sendResponse(res, 201, true, "Bid created successfully", bid);
   } catch (error) {
