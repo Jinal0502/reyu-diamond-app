@@ -1,9 +1,9 @@
 import mongoose, { Types } from "mongoose";
 import { KYC } from "../models/Kyc.model";
 import { User } from "../models/User.model";
-import { deleteSingleFile } from "../utils/cloundinary.delete";
+import { deleteSingleFile, CustomError, HTTP_STATUS, ErrorCode } from "../utils";
 import crypto from "crypto";
-import { CustomError } from "../utils/customError.utility";
+import logger from "../utils/logger";
 
 interface IUserPopulated {
   _id: Types.ObjectId;
@@ -24,7 +24,6 @@ export const submitKyc = async (
     lastName: string;
     dob: string;
     phone: string;
-
     address: {
       residentialAddress: string;
       city: string;
@@ -32,10 +31,8 @@ export const submitKyc = async (
       pincode: string;
       country?: string;
     };
-
     aadhaarNo: string;
     panNo: string;
-
     documents: {
       aadhaar: { url: string; publicId: string };
       pan: { url: string; publicId: string };
@@ -45,29 +42,24 @@ export const submitKyc = async (
 ) => {
   const userObjectId = new mongoose.Types.ObjectId(userId);
 
-  // 1. Fetch existing KYC
   const existing = await KYC.findOne({ userId: userObjectId });
 
   if (existing?.status === "approved") {
-    throw new CustomError("KYC already approved", 400);
+    throw new CustomError("KYC already approved", HTTP_STATUS.BAD_REQUEST, ErrorCode.KYC_ALREADY_APPROVED);
   }
 
-  // 2. Store old publicIds (for deletion later)
   const oldPublicIds = {
     aadhaar: existing?.documents?.aadhaar?.publicId,
     pan: existing?.documents?.pan?.publicId,
     selfie: existing?.documents?.selfie?.publicId,
   };
 
-  // 3. Prepare update payload (new docs already uploaded)
   const updatePayload: any = {
     firstName: data.firstName,
     middleName: data.middleName,
     lastName: data.lastName,
-
     dob: new Date(data.dob),
     phone: data.phone,
-
     address: {
       residentialAddress: data.address.residentialAddress,
       city: data.address.city,
@@ -75,7 +67,6 @@ export const submitKyc = async (
       pincode: data.address.pincode,
       country: data.address.country || "India",
     },
-
     documents: {
       aadhaar: {
         aadhaarHash: hashValue(data.aadhaarNo),
@@ -89,22 +80,18 @@ export const submitKyc = async (
       },
       selfie: data.documents.selfie ? { ...data.documents.selfie } : undefined,
     },
-
     status: "pending",
     rejectionReason: undefined,
     verifiedBy: undefined,
     verifiedAt: undefined,
   };
 
-  // 4. Update Mongo first (VERY IMPORTANT)
   const updatedKyc = await KYC.findOneAndUpdate(
     { userId: userObjectId },
     { $set: updatePayload },
     { upsert: true, new: true }
   );
 
-  // 5. Delete old files AFTER successful DB update
-  //    (so if upload fails, old docs are still safe)
   if (existing) {
     const deletePromises: Promise<void>[] = [];
 
@@ -124,10 +111,10 @@ export const submitKyc = async (
       deletePromises.push(deleteSingleFile(oldPublicIds.selfie));
     }
 
-    // delete all in parallel
     await Promise.all(deletePromises);
   }
 
+  logger.info("KYC submitted", { userId });
   return updatedKyc;
 };
 
@@ -142,17 +129,15 @@ export const verifyKyc = async (
   reason?: string
 ) => {
   if (decision === "rejected" && !reason) {
-    throw new CustomError("Rejection reason is required", 400);
+    throw new CustomError("Rejection reason is required", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
   }
 
-  const kyc = await KYC.findById(kycId).populate<{ userId: IUserPopulated }>(
-    "userId"
-  );
+  const kyc = await KYC.findById(kycId).populate<{ userId: IUserPopulated }>("userId");
 
-  if (!kyc) throw new CustomError("KYC not found", 404);
+  if (!kyc) throw new CustomError("KYC not found", HTTP_STATUS.NOT_FOUND, ErrorCode.KYC_NOT_FOUND);
 
   if (kyc.status === "approved") {
-    throw new CustomError("KYC already approved", 400);
+    throw new CustomError("KYC already approved", HTTP_STATUS.BAD_REQUEST, ErrorCode.KYC_ALREADY_APPROVED);
   }
 
   kyc.status = decision;
@@ -166,6 +151,7 @@ export const verifyKyc = async (
     isKycVerified: decision === "approved",
   });
 
+  logger.info("KYC decision made", { kycId, decision, adminId });
   return kyc;
 };
 

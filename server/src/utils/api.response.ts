@@ -6,13 +6,15 @@ export const sendResponse = (
   success: boolean,
   message: string,
   data?: any,
-  errors?: any
+  errors?: any,
+  code?: string
 ) => {
   const response: any = {
     success,
     message,
   };
 
+  if (code !== undefined) response.code = code;
   if (data !== undefined) response.data = data;
   if (errors !== undefined) response.errors = errors;
 

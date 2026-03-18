@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 import bcrypt from "bcryptjs";
-import { isValidEmail } from "../utils/email.validator";
+import { isValidEmail } from "../utils";
 
 export interface IUserStats {
   averageRating : number;

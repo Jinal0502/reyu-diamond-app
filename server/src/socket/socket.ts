@@ -5,7 +5,8 @@ import mongoose from "mongoose";
 
 import Conversation from "../models/Chat.conversation.model";
 import Message from "../models/Chat.message.model";
-import { CustomError } from "../utils/customError.utility";
+import { CustomError } from "../utils";
+import logger from "../utils/logger";
 
 dotenv.config();
 
@@ -21,7 +22,7 @@ export const setupSocket = (io: Server) => {
 
       const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
 
-      socket.user = decoded; // must contain id/_id
+      socket.user = decoded;
       next();
     } catch (error) {
       return next(new CustomError("Unauthorized : Invalid Token", 401));
@@ -31,15 +32,11 @@ export const setupSocket = (io: Server) => {
   io.on("connection", (socket: any) => {
     const userId = socket.user?.id || socket.user?._id;
 
-    console.log("User Connected:", userId);
+    logger.info("Socket user connected", { userId });
 
     // Join personal room (for notifications)
     socket.join(userId);
 
-    /**
-     * JOIN CONVERSATION ROOM
-     * This must be validated otherwise anyone can join any conversationId
-     */
     socket.on("joinconversation", async (conversationId: string) => {
       try {
         if (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId)) {
@@ -58,13 +55,14 @@ export const setupSocket = (io: Server) => {
 
         socket.join(conversationId);
 
-        console.log(`User ${userId} joined conversation ${conversationId}`);
+        logger.info("User joined conversation", { userId, conversationId });
 
         socket.emit("joinedConversation", {
           success: true,
           conversationId,
         });
       } catch (error: any) {
+        logger.warn("Join conversation failed", { userId, conversationId, error: error.message });
         socket.emit("socketError", {
           success: false,
           message: error.message || "Join conversation failed",
@@ -72,9 +70,6 @@ export const setupSocket = (io: Server) => {
       }
     });
 
-    /**
-     * TYPING EVENT
-     */
     socket.on("typing", ({ conversationId }: { conversationId: string }) => {
       socket.to(conversationId).emit("typing", {
         userId,
@@ -82,9 +77,6 @@ export const setupSocket = (io: Server) => {
       });
     });
 
-    /**
-     * SEND MESSAGE
-     */
     socket.on(
       "sendMessage",
       async ({
@@ -115,7 +107,6 @@ export const setupSocket = (io: Server) => {
 
           if (!isParticipant) throw new CustomError("Not allowed", 403);
 
-          // Save message
           const newMessage = await Message.create({
             conversationId,
             senderId: userId,
@@ -123,17 +114,13 @@ export const setupSocket = (io: Server) => {
             attachments: attachments || [],
             status: "SENT",
             sentAt: new Date(),
-
-            // legacy support
             from: userId,
             read: false,
           });
 
-          // Update conversation last message
           conversation.lastMessageText = text;
           conversation.lastMessageAt = new Date();
 
-          // Update unreadCount for receiver
           conversation.userSettings = conversation.userSettings.map((setting: any) => {
             if (setting.userId.toString() !== userId.toString()) {
               setting.unreadCount = (setting.unreadCount || 0) + 1;
@@ -143,15 +130,14 @@ export const setupSocket = (io: Server) => {
 
           await conversation.save();
 
-          // Emit message to all users in room
           io.to(conversationId).emit("newMessage", newMessage);
 
-          // Send ack to sender
           socket.emit("messageSent", {
             success: true,
             messageId: newMessage._id,
           });
         } catch (error: any) {
+          logger.error("Socket sendMessage failed", { userId, conversationId, error: error.message });
           socket.emit("socketError", {
             success: false,
             message: error.message || "Message sending failed",
@@ -160,9 +146,6 @@ export const setupSocket = (io: Server) => {
       }
     );
 
-    /**
-     * MARK AS READ
-     */
     socket.on(
       "markAsRead",
       async ({ conversationId }: { conversationId: string }) => {
@@ -181,7 +164,6 @@ export const setupSocket = (io: Server) => {
 
           if (!isParticipant) throw new CustomError("Not allowed", 403);
 
-          // Update all messages from other person as READ
           await Message.updateMany(
             {
               conversationId: new mongoose.Types.ObjectId(conversationId),
@@ -192,12 +174,11 @@ export const setupSocket = (io: Server) => {
               $set: {
                 readAt: new Date(),
                 status: "READ",
-                read: true, // legacy
+                read: true,
               },
             }
           );
 
-          // Reset unreadCount for current user
           conversation.userSettings = conversation.userSettings.map((setting: any) => {
             if (setting.userId.toString() === userId.toString()) {
               setting.unreadCount = 0;
@@ -208,7 +189,6 @@ export const setupSocket = (io: Server) => {
 
           await conversation.save();
 
-          // Notify other user
           io.to(conversationId).emit("messagesRead", {
             conversationId,
             userId,
@@ -219,6 +199,7 @@ export const setupSocket = (io: Server) => {
             conversationId,
           });
         } catch (error: any) {
+          logger.error("Socket markAsRead failed", { userId, conversationId, error: error.message });
           socket.emit("socketError", {
             success: false,
             message: error.message || "Mark read failed",
@@ -228,7 +209,7 @@ export const setupSocket = (io: Server) => {
     );
 
     socket.on("disconnect", () => {
-      console.log("User Disconnected:", userId);
+      logger.info("Socket user disconnected", { userId });
     });
   });
 };

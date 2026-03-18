@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 import Conversation from "../models/Chat.conversation.model";
 import Message from "../models/Chat.message.model";
-import { CustomError } from "../utils/customError.utility";
+import { CustomError, HTTP_STATUS, ErrorCode } from "../utils";
+import logger from "../utils/logger";
 
 /**
  * Initiate Conversation (Requirement/Deal)
@@ -17,9 +18,9 @@ export const initiateConversationService = async ({
   contextType: "REQUIREMENT" | "DEAL";
   contextId: string;
 }) => {
-  if (!participantId) throw new CustomError("participantId is required", 400);
-  if (!contextType) throw new CustomError("contextType is required", 400);
-  if (!contextId) throw new CustomError("contextId is required", 400);
+  if (!participantId) throw new CustomError("participantId is required", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
+  if (!contextType) throw new CustomError("contextType is required", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
+  if (!contextId) throw new CustomError("contextId is required", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
 
   const participantIds = [initiatorId, participantId]
     .map((id) => new mongoose.Types.ObjectId(id))
@@ -69,24 +70,20 @@ export const sendMessageService = async ({
   attachments?: any[];
   replyToMessageId?: string;
 }) => {
-  if (!conversationId) throw new CustomError("conversationId is required", 400);
-  if (!senderId) throw new CustomError("senderId is required", 400);
-  if (!text) throw new CustomError("text is required", 400);
+  if (!conversationId) throw new CustomError("conversationId is required", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
+  if (!senderId) throw new CustomError("senderId is required", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
+  if (!text) throw new CustomError("text is required", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
 
   const conversation: any = await Conversation.findById(conversationId);
-  if (!conversation) throw new CustomError("Conversation not found", 404);
-
-  console.log(conversation);
+  if (!conversation) throw new CustomError("Conversation not found", HTTP_STATUS.NOT_FOUND, ErrorCode.CONVERSATION_NOT_FOUND);
 
   // check sender is participant
   const isParticipant = conversation.participantIds.some((id: any) =>
   id.equals(senderId)
     );
 
-  console.log(isParticipant);
-
   if (!isParticipant) {
-    throw new CustomError("Not allowed to send message in this chat", 403);
+    throw new CustomError("Not allowed to send message in this chat", HTTP_STATUS.FORBIDDEN, ErrorCode.NOT_CONVERSATION_PARTICIPANT);
   }
 
   const message = await Message.create({
@@ -133,14 +130,14 @@ export const getConversationMessagesService = async ({
   limit?: number;
 }) => {
   const conversation: any = await Conversation.findById(conversationId);
-  if (!conversation) throw new CustomError("Conversation not found", 404);
+  if (!conversation) throw new CustomError("Conversation not found", HTTP_STATUS.NOT_FOUND, ErrorCode.CONVERSATION_NOT_FOUND);
 
   const isParticipant = conversation.participantIds.some((id: any) =>
   id.equals(userId)
     );
 
   if (!isParticipant) {
-    throw new CustomError("Not allowed to view this conversation", 403);
+    throw new CustomError("Not allowed to view this conversation", HTTP_STATUS.FORBIDDEN, ErrorCode.NOT_CONVERSATION_PARTICIPANT);
   }
 
   const skip = (page - 1) * limit;
@@ -181,18 +178,18 @@ export const markConversationAsReadService = async ({
   conversationId: string;
   userId: string;
 }) => {
-  if (!conversationId) throw new CustomError("conversationId is required", 400);
+  if (!conversationId) throw new CustomError("conversationId is required", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
 
   const conversation = await Conversation.findById(conversationId);
 
-  if (!conversation) throw new CustomError("Conversation not found", 404);
+  if (!conversation) throw new CustomError("Conversation not found", HTTP_STATUS.NOT_FOUND, ErrorCode.CONVERSATION_NOT_FOUND);
 
   const isParticipant = conversation.participantIds.some((id: any) =>
     id.equals(userId)
   );
 
   if (!isParticipant) {
-    throw new CustomError("Not allowed", 403);
+    throw new CustomError("Not allowed", HTTP_STATUS.FORBIDDEN, ErrorCode.NOT_CONVERSATION_PARTICIPANT);
   }
 
   // mark messages as READ (only messages not sent by me)

@@ -1,10 +1,12 @@
 import { Requirement, IRequirement } from "../models/Requirement.model";
 import { Types } from "mongoose";
+import { CustomError, ErrorCode, HTTP_STATUS } from "../utils";
+import logger from "../utils/logger";
 
 // Create a new preference requirement
 export const createRequirement = async (data: Partial<IRequirement>) => {
   if (!data.userId || !data.intent || !data.constraints) {
-    throw new Error("Invalid data");
+    throw new CustomError("Invalid data", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
   }
 
   const userId = new Types.ObjectId(data.userId);
@@ -22,40 +24,38 @@ export const createRequirement = async (data: Partial<IRequirement>) => {
   });
 
   if (existing) {
-    throw new Error("Duplicate requirement exists");
+    throw new CustomError("Duplicate requirement exists", HTTP_STATUS.CONFLICT, ErrorCode.REQUIREMENT_DUPLICATE);
   }
 
-  return Requirement.create({ ...data, userId });
+  const requirement = await Requirement.create({ ...data, userId });
+  logger.info("Requirement created", { requirementId: requirement._id, userId });
+  return requirement;
 };
 
-// Get all preferences for a user
 export const getRequirementsByUser = async (userId: string) => {
-  return Requirement.find({ userId: new Types.ObjectId(userId) }).sort({
-    createdAt: -1,
-  });
+  return Requirement.find({ userId: new Types.ObjectId(userId) }).sort({ createdAt: -1 });
 };
 
-// Get a single requirement by ID
 export const getRequirementById = async (requirementId: string) => {
   if (!Types.ObjectId.isValid(requirementId)) return null;
   return Requirement.findById(requirementId);
 };
 
-// Update a requirement
-export const updateRequirement = async (
-  requirementId: string,
-  data: Partial<IRequirement>
-) => {
+export const updateRequirement = async (requirementId: string, data: Partial<IRequirement>) => {
   const requirement = await Requirement.findById(requirementId);
-  if (!requirement) throw new Error("Requirement not found");
+  if (!requirement) {
+    throw new CustomError("Requirement not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
+  }
 
   return Requirement.findByIdAndUpdate(requirement._id, data, { new: true });
 };
 
-// Delete a requirement
 export const deleteRequirement = async (requirementId: string) => {
   const requirement = await Requirement.findById(requirementId);
-  if (!requirement) throw new Error("Requirement not found");
+  if (!requirement) {
+    throw new CustomError("Requirement not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
+  }
 
+  logger.info("Requirement deleted", { requirementId });
   return Requirement.findByIdAndDelete(requirement._id);
 };

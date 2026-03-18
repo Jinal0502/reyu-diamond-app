@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose , {Types} from "mongoose";
 import { Deal, IDeal } from "../models/Deal.model";
-import { sendResponse } from "../utils/api.response";
+import { sendResponse } from "../utils";
+import logger from "../utils/logger";
 
 interface DealRequest extends Request {
   deal?: IDeal;
@@ -41,7 +42,7 @@ export const canAccessDeal = async (
 
     next();
   } catch (error) {
-    console.error("Deal access error:", error);
+    logger.error("Deal access authorization error", { dealId: req.params?.dealId, error });
     return sendResponse(res, 500, false, "Authorization failed");
   }
 };

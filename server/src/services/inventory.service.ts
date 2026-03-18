@@ -1,27 +1,20 @@
 import { Inventory, IInventory } from "../models/Inventory.model";
 import { Types } from "mongoose";
-import {
-  deleteFolderByPrefix,
-  deleteSingleFile,
-} from "../utils/cloundinary.delete";
+import { deleteFolderByPrefix, deleteSingleFile, CustomError, ErrorCode, HTTP_STATUS } from "../utils";
+import logger from "../utils/logger";
 
 /* ================= CLOUDINARY PUBLIC ID EXTRACTOR ================= */
 
 const getPublicIdFromUrl = (url: string): string => {
   const cleanUrl = url.split("?")[0];
 
-  // example:
-  // https://res.cloudinary.com/dnwy44rve/image/upload/v1700000000/inventory/12345/img_abc.jpg
-
   const uploadIndex = cleanUrl.indexOf("/upload/");
-  if (uploadIndex === -1) throw new Error("Invalid Cloudinary URL");
+  if (uploadIndex === -1) {
+    throw new CustomError("Invalid Cloudinary URL", HTTP_STATUS.BAD_REQUEST, ErrorCode.BAD_REQUEST);
+  }
 
   let publicIdWithExt = cleanUrl.substring(uploadIndex + "/upload/".length);
-
-  // remove version v12345/
   publicIdWithExt = publicIdWithExt.replace(/^v\d+\//, "");
-
-  // remove file extension
   const publicId = publicIdWithExt.replace(/\.[^/.]+$/, "");
 
   return publicId;
@@ -30,47 +23,42 @@ const getPublicIdFromUrl = (url: string): string => {
 /* ================= CREATE ================= */
 
 export const createInventory = async (data: Partial<IInventory>) => {
-  
-  if (!data.sellerId) throw new Error("Seller ID is required");
+  if (!data.sellerId) {
+    throw new CustomError("Seller ID is required", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
+  }
 
   data.status = "available";
   data.locked = false;
 
-  return Inventory.create(data);
+  const inventory = await Inventory.create(data);
+  logger.info("Inventory item created", { inventoryId: inventory._id, sellerId: data.sellerId });
+  return inventory;
 };
 
 /* ================= UPDATE ================= */
 
-export const updateInventory = async (
-  inventoryId: string,
-  updates: Partial<IInventory>
-) => {
+export const updateInventory = async (inventoryId: string, updates: Partial<IInventory>) => {
   const inventory = await Inventory.findById(inventoryId);
 
-  if (!inventory) throw new Error("Inventory not found");
-  if (inventory.locked) throw new Error("Inventory is locked");
+  if (!inventory) throw new CustomError("Inventory not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
+  if (inventory.locked) throw new CustomError("Inventory is locked", HTTP_STATUS.FORBIDDEN, ErrorCode.INVENTORY_LOCKED);
 
   delete updates.soldAt;
   delete updates.listedAt;
 
-  return Inventory.findOneAndUpdate(
-    { _id: inventoryId, locked: false },
-    updates,
-    { new: true }
-  );
+  return Inventory.findOneAndUpdate({ _id: inventoryId, locked: false }, updates, { new: true });
 };
 
 /* ================= DELETE ================= */
 
 export const deleteInventory = async (inventoryId: string) => {
-  const deleted = await Inventory.findOneAndDelete({
-    _id: inventoryId,
-    locked: false,
-  });
+  const deleted = await Inventory.findOneAndDelete({ _id: inventoryId, locked: false });
 
-  if (!deleted) throw new Error("Inventory not found or locked");
+  if (!deleted) {
+    throw new CustomError("Inventory not found or locked", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
+  }
 
-  // 🔥 delete everything from cloudinary folder
+  logger.info("Inventory deleted", { inventoryId });
   await deleteFolderByPrefix(`inventory/${inventoryId}`);
 };
 
@@ -92,20 +80,16 @@ export const getInventoryByIdOrBarcode = async (value: string) => {
 
 /* ================= ADD MEDIA ================= */
 
-export const addMedia = async (
-  inventoryId: string,
-  images: string[] = [],
-  video?: string
-) => {
+export const addMedia = async (inventoryId: string, images: string[] = [], video?: string) => {
   const inventory = await Inventory.findById(inventoryId);
 
-  if (!inventory) throw new Error("Inventory not found");
-  if (inventory.locked) throw new Error("Inventory is locked");
+  if (!inventory) throw new CustomError("Inventory not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
+  if (inventory.locked) throw new CustomError("Inventory is locked", HTTP_STATUS.FORBIDDEN, ErrorCode.INVENTORY_LOCKED);
 
   if (images.length) inventory.images.push(...images);
 
   if (video && inventory.video) {
-    throw new Error("Only one video is allowed per inventory");
+    throw new CustomError("Only one video is allowed per inventory", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
   }
 
   if (video) inventory.video = video;
@@ -116,48 +100,33 @@ export const addMedia = async (
 
 /* ================= REPLACE MEDIA ================= */
 
-export const replaceMedia = async (
-  inventoryId: string,
-  images?: string[],
-  video?: string,
-  index?: number
-) => {
+export const replaceMedia = async (inventoryId: string, images?: string[], video?: string, index?: number) => {
   const inventory = await Inventory.findById(inventoryId);
 
-  if (!inventory) throw new Error("Inventory not found");
-  if (inventory.locked) throw new Error("Inventory is locked");
+  if (!inventory) throw new CustomError("Inventory not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
+  if (inventory.locked) throw new CustomError("Inventory is locked", HTTP_STATUS.FORBIDDEN, ErrorCode.INVENTORY_LOCKED);
 
-  // replace image(s)
   if (images) {
     if (typeof index === "number") {
       if (index < 0 || index >= inventory.images.length) {
-        throw new Error("Invalid image index");
+        throw new CustomError("Invalid image index", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
       }
 
-      // delete old image from cloudinary
-      const oldImageUrl = inventory.images[index];
-      const oldPublicId = getPublicIdFromUrl(oldImageUrl);
+      const oldPublicId = getPublicIdFromUrl(inventory.images[index]);
       await deleteSingleFile(oldPublicId);
-
       inventory.images[index] = images[0];
     } else {
-      // delete all old images
       for (const imgUrl of inventory.images) {
-        const publicId = getPublicIdFromUrl(imgUrl);
-        await deleteSingleFile(publicId);
+        await deleteSingleFile(getPublicIdFromUrl(imgUrl));
       }
-
       inventory.images = images;
     }
   }
 
-  // replace video
   if (video) {
     if (inventory.video) {
-      const oldVideoPublicId = getPublicIdFromUrl(inventory.video);
-      await deleteSingleFile(oldVideoPublicId);
+      await deleteSingleFile(getPublicIdFromUrl(inventory.video));
     }
-
     inventory.video = video;
   }
 
@@ -167,42 +136,29 @@ export const replaceMedia = async (
 
 /* ================= REMOVE MEDIA ================= */
 
-export const removeMedia = async (
-  inventoryId: string,
-  removeAllImages: boolean = false,
-  removeVideo: boolean = false
-) => {
+export const removeMedia = async (inventoryId: string, removeAllImages: boolean = false, removeVideo: boolean = false) => {
   const inventory = await Inventory.findById(inventoryId);
 
-  if (!inventory) throw new Error("Inventory not found");
-  if (inventory.locked) throw new Error("Inventory is locked");
+  if (!inventory) throw new CustomError("Inventory not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
+  if (inventory.locked) throw new CustomError("Inventory is locked", HTTP_STATUS.FORBIDDEN, ErrorCode.INVENTORY_LOCKED);
 
-  // ✅ if removing everything -> delete folder directly
   if (removeAllImages && removeVideo) {
     await deleteFolderByPrefix(`inventory/${inventoryId}`);
-
     inventory.images = [];
     inventory.video = undefined;
-
     await inventory.save();
     return inventory;
   }
 
-  // ✅ remove all images only
   if (removeAllImages && inventory.images.length > 0) {
     for (const imgUrl of inventory.images) {
-      const publicId = getPublicIdFromUrl(imgUrl);
-      await deleteSingleFile(publicId);
+      await deleteSingleFile(getPublicIdFromUrl(imgUrl));
     }
-
     inventory.images = [];
   }
 
-  // ✅ remove video only
   if (removeVideo && inventory.video) {
-    const publicId = getPublicIdFromUrl(inventory.video);
-    await deleteSingleFile(publicId);
-
+    await deleteSingleFile(getPublicIdFromUrl(inventory.video));
     inventory.video = undefined;
   }
 

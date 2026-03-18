@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { Advertisement } from "../models/Advertisement.model";
-import { CustomError } from "../utils/customError.utility";
+import { CustomError, HTTP_STATUS, ErrorCode } from "../utils";
+import logger from "../utils/logger";
 
   //  REQUEST AD
 
@@ -25,7 +26,7 @@ export const requestAdService = async ({
   } = payload;
 
   if (!title || !mediaUrl || !mediaType) {
-    throw new CustomError("Required fields missing", 400);
+    throw new CustomError("Required fields missing", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
   }
 
   const ad = await Advertisement.create({
@@ -41,6 +42,7 @@ export const requestAdService = async ({
     status: "PENDING",
   });
 
+  logger.info("Advertisement request created", { adId: ad._id, advertiserId });
   return ad;
 };
 
@@ -83,7 +85,7 @@ export const getActiveAdsService = async (section?: string) => {
 export const getAdByIdService = async (adId: Types.ObjectId) => {
   const ad = await Advertisement.findById(adId);
 
-  if (!ad) throw new CustomError("Advertisement not found", 404);
+  if (!ad) throw new CustomError("Advertisement not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
   return ad;
 };
@@ -105,10 +107,10 @@ export const updateAdStatusService = async ({
 
   const ad = await Advertisement.findById(adId);
 
-  if (!ad) throw new CustomError("Advertisement not found", 404);
+  if (!ad) throw new CustomError("Advertisement not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
   if (!["APPROVE", "REJECT", "DISABLE"].includes(action)) {
-    throw new CustomError("Invalid action", 400);
+    throw new CustomError("Invalid action", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
   }
 
   if (action === "APPROVE") {
@@ -118,7 +120,7 @@ export const updateAdStatusService = async ({
 
   if (action === "REJECT") {
     if (!rejectionReason)
-      throw new CustomError("rejectionReason required", 400);
+      throw new CustomError("rejectionReason required", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
 
     ad.status = "REJECTED";
     ad.rejectionReason = rejectionReason;
@@ -130,6 +132,7 @@ export const updateAdStatusService = async ({
 
   await ad.save();
 
+  logger.info("Advertisement status updated", { adId, action, adminId });
   return ad;
 };
 
@@ -146,28 +149,29 @@ export const clickAdService = async ({
 }: ClickAdInput) => {
   const ad = await Advertisement.findById(adId);
 
-  if (!ad) throw new CustomError("Advertisement not found", 404);
+  if (!ad) throw new CustomError("Advertisement not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
   /* ---------- STATUS CHECK ---------- */
   if (ad.status !== "APPROVED") {
-    throw new CustomError("Ad not active", 400);
+    throw new CustomError("Ad not active", HTTP_STATUS.BAD_REQUEST, ErrorCode.AD_NOT_ACTIVE);
   }
 
   const now = new Date();
 
   /* ---------- DATE CHECK ---------- */
   if (ad.startDate && ad.startDate > now) {
-    throw new CustomError("Campaign not started", 400);
+    throw new CustomError("Campaign not started", HTTP_STATUS.BAD_REQUEST, ErrorCode.AD_CAMPAIGN_NOT_STARTED);
   }
 
   if (ad.endDate && ad.endDate < now) {
-    throw new CustomError("Campaign expired", 400);
+    throw new CustomError("Campaign expired", HTTP_STATUS.BAD_REQUEST, ErrorCode.AD_CAMPAIGN_EXPIRED);
   }
 
   /* ---------- CTA CHECK ---------- */
   if (!ad.ctaLink) {
-    throw new CustomError("Redirect link missing", 400);
+    throw new CustomError("Redirect link missing", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
   }
 
+  logger.info("Ad click redirect", { adId, currentUserId });
   return ad.ctaLink;
 };

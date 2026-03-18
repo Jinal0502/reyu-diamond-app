@@ -7,6 +7,8 @@ import { Inventory } from "../models/Inventory.model";
 import Escrow from "../models/Escrow.model";
 import { releaseEscrowService , refundEscrowService } from "../services/escrow.service";
 import { handleDealCancelled} from "./user-stats.service";
+import logger from "../utils/logger";
+import { CustomError, ErrorCode, HTTP_STATUS } from "../utils";
 
 /**
  * Deal will be created automatically when bid is ACCEPTED
@@ -18,23 +20,20 @@ export const createDealService = async (
   session: mongoose.ClientSession
 ) => {
   const bid = await Bid.findById(bidId).session(session);
-  if (!bid) throw new Error("Bid not found");
+  if (!bid) throw new CustomError("Bid not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
   const auction = await Auction.findById(bid.auctionId).session(session);
-  if (!auction) throw new Error("Auction not found");
+  if (!auction) throw new CustomError("Auction not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
   if (auction.sellerId.toString() !== sellerId) {
-    throw new Error("Seller mismatch");
+    throw new CustomError("Seller mismatch", HTTP_STATUS.FORBIDDEN, ErrorCode.FORBIDDEN);
   }
 
-  const inventory = await Inventory.findById(auction.inventoryId).session(
-    session
-  );
-  if (!inventory) throw new Error("Inventory not found");
+  const inventory = await Inventory.findById(auction.inventoryId).session(session);
+  if (!inventory) throw new CustomError("Inventory not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
-  // Prevent duplicate deal
   const existingDeal = await Deal.findOne({ bidId: bid._id }).session(session);
-  if (existingDeal) throw new Error("Deal already exists for this bid");
+  if (existingDeal) throw new CustomError("Deal already exists for this bid", HTTP_STATUS.CONFLICT, ErrorCode.DEAL_ALREADY_EXISTS);
 
   // Inventory must already be moved to memo by bid accept logic
 
@@ -62,6 +61,7 @@ export const createDealService = async (
     { session }
   );
 
+  logger.info("Deal created", { dealId: deal._id, bidId, sellerId, buyerId: bid.buyerId });
   return deal;
 };
 
@@ -87,12 +87,14 @@ export const updateDealStatusService = async (
 
   try {
     const deal = await Deal.findById(dealId).session(session);
-    if (!deal) throw new Error("Deal not found");
+    if (!deal) throw new CustomError("Deal not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
     const allowed = DEAL_TRANSITIONS[deal.status];
     if (!allowed.includes(newStatus)) {
-      throw new Error(
-        `Invalid transition from ${deal.status} to ${newStatus}`
+      throw new CustomError(
+        `Invalid transition from ${deal.status} to ${newStatus}`,
+        HTTP_STATUS.BAD_REQUEST,
+        ErrorCode.INVALID_STATUS_TRANSITION
       );
     }
 
@@ -103,7 +105,7 @@ export const updateDealStatusService = async (
     switch (newStatus) {
       case "SHIPPED":
         if (!isSeller && !isAdmin) {
-          throw new Error("Only seller/admin can mark shipped");
+          throw new CustomError("Only seller/admin can mark shipped", HTTP_STATUS.FORBIDDEN, ErrorCode.FORBIDDEN);
         }
 
         deal.sellerConfirmedShipped = true;
@@ -118,7 +120,7 @@ export const updateDealStatusService = async (
 
       case "DELIVERED":
         if (!isBuyer && !isAdmin) {
-          throw new Error("Only buyer/admin can confirm delivery");
+          throw new CustomError("Only buyer/admin can confirm delivery", HTTP_STATUS.FORBIDDEN, ErrorCode.FORBIDDEN);
         }
 
         deal.buyerConfirmedDelivered = true;
@@ -130,7 +132,7 @@ export const updateDealStatusService = async (
 
       case "DISPUTED":
         if (!isBuyer && !isSeller && !isAdmin) {
-          throw new Error("Only participants/admin can dispute");
+          throw new CustomError("Only participants/admin can dispute", HTTP_STATUS.FORBIDDEN, ErrorCode.FORBIDDEN);
         }
 
         deal.dispute = {
@@ -155,6 +157,7 @@ export const updateDealStatusService = async (
     await session.commitTransaction();
     session.endSession();
 
+    logger.info("Deal status updated", { dealId, newStatus, userId });
     return deal;
   } catch (error) {
     await session.abortTransaction();
@@ -175,14 +178,14 @@ export const getDealByIdService = async (
     .populate("buyerId", "name email")
     .populate("sellerId", "name email");
 
-  if (!deal) throw new Error("Deal not found");
+  if (!deal) throw new CustomError("Deal not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
   const isParticipant =
     deal.buyerId._id.toString() === userId ||
     deal.sellerId._id.toString() === userId ||
     role === "admin";
 
-  if (!isParticipant) throw new Error("Access denied");
+  if (!isParticipant) throw new CustomError("Access denied", HTTP_STATUS.FORBIDDEN, ErrorCode.FORBIDDEN);
 
   return deal;
 };
@@ -212,19 +215,18 @@ export const cancelDealService = async (
 
   try {
     const deal = await Deal.findById(dealId).session(session);
-    if (!deal) throw new Error("Deal not found");
+    if (!deal) throw new CustomError("Deal not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
     const isBuyer = deal.buyerId.toString() === userId;
     const isSeller = deal.sellerId.toString() === userId;
     const isAdmin = role === "admin";
 
     if (!isBuyer && !isSeller && !isAdmin) {
-      throw new Error("Only buyer/seller/admin can cancel deal");
+      throw new CustomError("Only buyer/seller/admin can cancel deal", HTTP_STATUS.FORBIDDEN, ErrorCode.FORBIDDEN);
     }
 
-    // if already completed, cannot cancel
     if (deal.status === "COMPLETED") {
-      throw new Error("Completed deal cannot be cancelled");
+      throw new CustomError("Completed deal cannot be cancelled", HTTP_STATUS.BAD_REQUEST, ErrorCode.DEAL_ALREADY_COMPLETED);
     }
 
     // find escrow
@@ -266,6 +268,7 @@ export const cancelDealService = async (
       sellerId: deal.sellerId
     });
 
+    logger.info("Deal cancelled", { dealId, cancelledBy: userId });
     return {
       deal,
       escrow,
@@ -289,26 +292,25 @@ export const raiseDisputeService = async (
 
   try {
     const deal = await Deal.findById(dealId).session(session);
-    if (!deal) throw new Error("Deal not found");
+    if (!deal) throw new CustomError("Deal not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
     const escrow = await Escrow.findOne({ dealId }).session(session);
-    if (!escrow) throw new Error("Escrow not found");
+    if (!escrow) throw new CustomError("Escrow not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
     const isBuyer = deal.buyerId.toString() === userId;
     const isSeller = deal.sellerId.toString() === userId;
     const isAdmin = role === "admin";
 
     if (!isBuyer && !isSeller && !isAdmin) {
-      throw new Error("Only buyer/seller/admin can raise dispute");
+      throw new CustomError("Only buyer/seller/admin can raise dispute", HTTP_STATUS.FORBIDDEN, ErrorCode.FORBIDDEN);
     }
 
-    // dispute can happen only when money is in escrow
     if (escrow.status !== "HELD") {
-      throw new Error("Dispute can only be raised when escrow is HELD");
+      throw new CustomError("Dispute can only be raised when escrow is HELD", HTTP_STATUS.BAD_REQUEST, ErrorCode.BAD_REQUEST);
     }
 
     if (deal.status === "DISPUTED") {
-      throw new Error("Deal already disputed");
+      throw new CustomError("Deal already disputed", HTTP_STATUS.BAD_REQUEST, ErrorCode.INVALID_STATUS_TRANSITION);
     }
 
     deal.status = "DISPUTED";
@@ -331,6 +333,7 @@ export const raiseDisputeService = async (
     await session.commitTransaction();
     session.endSession();
 
+    logger.info("Dispute raised on deal", { dealId, raisedBy: userId });
     return deal;
   } catch (error) {
     await session.abortTransaction();
@@ -348,21 +351,21 @@ export const resolveDisputeService = async (
   note?: string,
 ) => {
   if (role !== "admin") {
-    throw new Error("Only admin can resolve disputes");
+    throw new CustomError("Only admin can resolve disputes", HTTP_STATUS.FORBIDDEN, ErrorCode.FORBIDDEN);
   }
 
   const deal = await Deal.findById(dealId);
-  if (!deal) throw new Error("Deal not found");
+  if (!deal) throw new CustomError("Deal not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
   const escrow = await Escrow.findOne({ dealId });
-  if (!escrow) throw new Error("Escrow not found");
+  if (!escrow) throw new CustomError("Escrow not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
   if (deal.status !== "DISPUTED") {
-    throw new Error("Deal is not in disputed state");
+    throw new CustomError("Deal is not in disputed state", HTTP_STATUS.BAD_REQUEST, ErrorCode.DEAL_NOT_DISPUTED);
   }
 
   if (escrow.status !== "HELD") {
-    throw new Error("Escrow must be HELD to resolve dispute");
+    throw new CustomError("Escrow must be HELD to resolve dispute", HTTP_STATUS.BAD_REQUEST, ErrorCode.ESCROW_NOT_HELD);
   }
 
   // update dispute resolution fields
@@ -379,6 +382,8 @@ export const resolveDisputeService = async (
 
   await deal.save();
 
+  logger.info("Dispute resolved", { dealId, resolution, resolvedBy: userId });
+
   // now execute action based on resolution
   if (resolution === "REFUND_BUYER") {
     return await refundEscrowService(dealId, userId, role , note!);
@@ -388,5 +393,5 @@ export const resolveDisputeService = async (
     return await releaseEscrowService(dealId, userId, role , note!);
   }
 
-  throw new Error("Invalid resolution type");
+  throw new CustomError("Invalid resolution type", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
 };

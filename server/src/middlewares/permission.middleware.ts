@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
-import { sendResponse } from "../utils/api.response";
+import { sendResponse } from "../utils";
+import logger from "../utils/logger";
 
 export const permit =
   (...roles: string[]) =>
@@ -51,7 +52,7 @@ export const ownerOrRole = (
 
       next();
     } catch (error) {
-      console.error("Authorization error:", error);
+      logger.error("Owner/role authorization error", { resourceId: req.params?.[paramKey], error });
       return sendResponse(res, 500, false, "Authorization failed");
     }
   };

@@ -11,6 +11,7 @@ import routes from "./routes/index.routes.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
 import { stripeWebhookController } from "./controllers/stripe.webhook.controller.js";
 import { initAuctionCron } from "./cron/auction.cron.js";
+import logger from "./utils/logger";
 
 dotenv.config();
 connectDB();
@@ -85,6 +86,6 @@ setupSocket(io);
 // start server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  logger.info(`Server running on port ${PORT}`, { port: PORT, env: process.env.NODE_ENV });
   initAuctionCron();
 });

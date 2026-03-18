@@ -1,7 +1,8 @@
 import {Request , Response , NextFunction} from "express";
 import jwt from "jsonwebtoken";
 import {User} from "../models/User.model";
-import { sendResponse } from "../utils/api.response";
+import { sendResponse } from "../utils";
+import logger from "../utils/logger";
 
 interface JwtPayload {
     userId: string;
@@ -43,7 +44,7 @@ export const protect = async(
         next();
     }
     catch(err) {
-
+        logger.warn("JWT verification failed", { error: err });
         return sendResponse(res , 401 , false, "Invalid or Expired Token");
     }
 }

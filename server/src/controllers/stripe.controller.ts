@@ -1,50 +1,39 @@
 import { NextFunction, Response } from "express";
-import { createStripeConnectedAccountService , generateOnboardingLinkService , checkStripeAccountStatusService  } from "../services/stripe.service";
-import { sendResponse } from "../utils/api.response";
+import {
+  createStripeConnectedAccountService,
+  generateOnboardingLinkService,
+  checkStripeAccountStatusService,
+} from "../services/stripe.service";
+import { sendResponse, SuccessCode, SUCCESS_MESSAGES } from "../utils";
 
-export const createConnectedAccount = async (req: any, res: Response , next : NextFunction) => {
+export const createConnectedAccount = async (req: any, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user._id;
-
-    const result = await createStripeConnectedAccountService(userId);
+    const result = await createStripeConnectedAccountService(req.user._id);
 
     if (result.alreadyExists) {
-      return res.status(200).json({
-        success: true,
-        message: "Stripe account already exists",
-        accountId: result.accountId,
-      });
+      return sendResponse(res, 200, true, SUCCESS_MESSAGES[SuccessCode.STRIPE_ACCOUNT_EXISTS], { accountId: result.accountId }, undefined, SuccessCode.STRIPE_ACCOUNT_EXISTS);
     }
 
-    return sendResponse(res , 201 , true , "Stripe connected account created successfully" , {accountId : result.accountId});
-  } 
-  catch (error: any) {
-    next(error);
-  }
-};
-
-export const createOnboardingLink = async (req: any, res: Response , next : NextFunction) => {
-  try {
-    const userId = req.user._id;
-
-    const result = await generateOnboardingLinkService(userId);
-
-    return sendResponse(res , 200 , true , "Stripe onboarding link generated successfully", {url : result.url});
-  } 
-  catch (error: any) {
-
-    next(error);
-  }
-};
-
-export const checkStripeAccountStatusController = async (req: any, res: Response , next : NextFunction) => {
-  try {
-    const userId = req.user._id;
-
-    const data = await checkStripeAccountStatusService(userId);
-
-    return sendResponse(res , 200 , true , "Stripe account status fetched successfully", data);
+    return sendResponse(res, 201, true, SUCCESS_MESSAGES[SuccessCode.STRIPE_ACCOUNT_CREATED], { accountId: result.accountId }, undefined, SuccessCode.STRIPE_ACCOUNT_CREATED);
   } catch (error: any) {
-     next(error);
+    next(error);
+  }
+};
+
+export const createOnboardingLink = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const result = await generateOnboardingLinkService(req.user._id);
+    return sendResponse(res, 200, true, SUCCESS_MESSAGES[SuccessCode.STRIPE_ONBOARDING_LINK], { url: result.url }, undefined, SuccessCode.STRIPE_ONBOARDING_LINK);
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+export const checkStripeAccountStatusController = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const data = await checkStripeAccountStatusService(req.user._id);
+    return sendResponse(res, 200, true, SUCCESS_MESSAGES[SuccessCode.STRIPE_STATUS_FETCHED], data, undefined, SuccessCode.STRIPE_STATUS_FETCHED);
+  } catch (error: any) {
+    next(error);
   }
 };

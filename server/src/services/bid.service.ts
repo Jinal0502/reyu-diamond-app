@@ -3,6 +3,8 @@ import { Auction } from "../models/Auction.model";
 import { Inventory } from "../models/Inventory.model";
 import { Bid } from "../models/Bid.model";
 import { createDealService } from "./deal.service";
+import logger from "../utils/logger";
+import { CustomError, ErrorCode, HTTP_STATUS } from "../utils";
 
 export type BidAction = "ACCEPT" | "REJECT" | "EXPIRE";
 
@@ -26,26 +28,26 @@ export const createBidService = async ({
 
     try {
       const auction = await Auction.findById(auctionId).session(session);
-      if (!auction) throw new Error("Auction not found");
+      if (!auction) throw new CustomError("Auction not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
       if (auction.status !== "active")
-        throw new Error("Auction is not active");
+        throw new CustomError("Auction is not active", HTTP_STATUS.BAD_REQUEST, ErrorCode.AUCTION_NOT_ACTIVE);
 
       const now = new Date();
       if (now < new Date(auction.startDate))
-        throw new Error("Auction not started");
+        throw new CustomError("Auction not started", HTTP_STATUS.BAD_REQUEST, ErrorCode.AUCTION_NOT_ACTIVE);
       if (now > new Date(auction.endDate))
-        throw new Error("Auction has ended");
+        throw new CustomError("Auction has ended", HTTP_STATUS.BAD_REQUEST, ErrorCode.AUCTION_NOT_ACTIVE);
 
       if (auction.sellerId.toString() === buyerId)
-        throw new Error("You cannot bid on your own auction");
+        throw new CustomError("You cannot bid on your own auction", HTTP_STATUS.FORBIDDEN, ErrorCode.SELF_BID_NOT_ALLOWED);
 
       if (auction.highestBidderId?.toString() === buyerId)
-        throw new Error("You already have the highest bid");
+        throw new CustomError("You already have the highest bid", HTTP_STATUS.BAD_REQUEST, ErrorCode.ALREADY_HIGHEST_BIDDER);
 
       const currentPrice = auction.currentBid ?? auction.basePrice;
       if (bidAmount <= currentPrice)
-        throw new Error(`Bid must be higher than ${currentPrice}`);
+        throw new CustomError(`Bid must be higher than ${currentPrice}`, HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
 
       // Create bid temporarily not highest
       const [bid] = await Bid.create(
@@ -104,6 +106,7 @@ export const createBidService = async ({
       await session.commitTransaction();
       session.endSession();
 
+      logger.info("Bid created", { bidId: bid._id, auctionId, buyerId, bidAmount });
       return bid;
     } catch (error: any) {
       await session.abortTransaction();
@@ -121,8 +124,10 @@ export const createBidService = async ({
     }
   }
 
-  throw new Error(
-    "Bid conflict persisted. Please check latest bid and try again."
+  throw new CustomError(
+    "Bid conflict persisted. Please check latest bid and try again.",
+    HTTP_STATUS.CONFLICT,
+    ErrorCode.BID_CONFLICT
   );
 };
 
@@ -137,26 +142,26 @@ export const updateBidStatusService = async (
 
   try {
     const bid = await Bid.findById(bidId).session(session);
-    if (!bid) throw new Error("Bid not found");
+    if (!bid) throw new CustomError("Bid not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
     if (bid.status !== "ACTIVE")
-      throw new Error("Only active bids can be updated");
+      throw new CustomError("Only active bids can be updated", HTTP_STATUS.BAD_REQUEST, ErrorCode.BID_NOT_ACTIVE);
 
     const auction = await Auction.findById(bid.auctionId).session(session);
-    if (!auction) throw new Error("Auction not found");
+    if (!auction) throw new CustomError("Auction not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
     const isOwner = auction.sellerId.toString() === userId;
     const isAdmin = userRole === "admin";
 
     if (!isOwner && !isAdmin)
-      throw new Error("Access denied");
+      throw new CustomError("Access denied", HTTP_STATUS.FORBIDDEN, ErrorCode.FORBIDDEN);
 
     let deal: any = null;
 
     switch (action) {
       case "ACCEPT": {
         if (auction.status !== "active")
-          throw new Error("Auction is not active");
+          throw new CustomError("Auction is not active", HTTP_STATUS.BAD_REQUEST, ErrorCode.AUCTION_NOT_ACTIVE);
 
         // Reject all other active bids
         await Bid.updateMany(
@@ -184,7 +189,7 @@ export const updateBidStatusService = async (
         await auction.save({ session });
 
         const inventory = await Inventory.findById(auction.inventoryId).session(session);
-        if (!inventory) throw new Error("Inventory not found");
+        if (!inventory) throw new CustomError("Inventory not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
         inventory.status = "on_memo";
         inventory.locked = true;
@@ -236,12 +241,13 @@ export const updateBidStatusService = async (
       }
 
       default:
-        throw new Error("Invalid bid action");
+        throw new CustomError("Invalid bid action", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
     }
 
     await session.commitTransaction();
     session.endSession();
 
+    logger.info("Bid status updated", { bidId, action, userId });
     return { bid, deal };
   } catch (error) {
     await session.abortTransaction();
@@ -270,7 +276,7 @@ export const getMyBidService = async (auctionId: string, buyerId: string) => {
     !mongoose.Types.ObjectId.isValid(auctionId) ||
     !mongoose.Types.ObjectId.isValid(buyerId)
   ) {
-    throw new Error("Invalid auctionId or buyerId");
+    throw new CustomError("Invalid auctionId or buyerId", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
   }
 
   return Bid.find({ auctionId, buyerId })

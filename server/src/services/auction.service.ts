@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import { Inventory } from "../models/Inventory.model";
 import { Auction, IAuction } from "../models/Auction.model";
+import logger from "../utils/logger";
+import { CustomError, ErrorCode, HTTP_STATUS } from "../utils";
 
 interface CreateAuctionInput {
   inventoryId: string;
@@ -24,23 +26,23 @@ export const createAuctionService = async ({
 
   try {
     const inventory = await Inventory.findById(inventoryId).session(session);
-    if (!inventory) throw new Error("Inventory not found");
+    if (!inventory) throw new CustomError("Inventory not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
     if (inventory.sellerId.toString() !== userId.toString())
-      throw new Error("You are not allowed to create auction for this inventory");
+      throw new CustomError("You are not allowed to create auction for this inventory", HTTP_STATUS.FORBIDDEN, ErrorCode.FORBIDDEN);
 
     if (inventory.status !== "available")
-      throw new Error("Inventory must be available to create auction");
+      throw new CustomError("Inventory must be available to create auction", HTTP_STATUS.BAD_REQUEST, ErrorCode.INVENTORY_NOT_AVAILABLE);
 
     if (inventory.startingPrice >= basePrice)
-      throw new Error("Base price must be greater than inventory price");
+      throw new CustomError("Base price must be greater than inventory price", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
 
     const now = new Date();
     const sDate = new Date(startDate);
     const eDate = new Date(endDate);
 
-    if (sDate < now) throw new Error("Start date cannot be in the past");
-    if (eDate <= sDate) throw new Error("End date must be after start date");
+    if (sDate < now) throw new CustomError("Start date cannot be in the past", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
+    if (eDate <= sDate) throw new CustomError("End date must be after start date", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
 
     const existingAuction = await Auction.findOne({
       inventoryId,
@@ -48,7 +50,7 @@ export const createAuctionService = async ({
     }).session(session);
 
     if (existingAuction)
-      throw new Error("Auction already exists for this inventory");
+      throw new CustomError("Auction already exists for this inventory", HTTP_STATUS.CONFLICT, ErrorCode.AUCTION_ALREADY_EXISTS);
 
     const auction = await Auction.create(
       [
@@ -75,6 +77,7 @@ export const createAuctionService = async ({
     await session.commitTransaction();
     session.endSession();
 
+    logger.info("Auction created", { auctionId: auction[0]._id, inventoryId, userId });
     return auction[0];
 
   } catch (error) {
@@ -101,7 +104,7 @@ export const getAuctionByIdService = async (auctionId: string) => {
     .populate("highestBidId")
     .populate("bidIds");
 
-  if (!auction) throw new Error("Auction not found");
+  if (!auction) throw new CustomError("Auction not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
   return auction;
 };
 
@@ -111,29 +114,29 @@ export const updateAuctionService = async (
   updates: { startDate?: Date; endDate?: Date; basePrice?: number }
 ) => {
   const auction = await Auction.findById(auctionId).populate("inventoryId");
-  if (!auction) throw new Error("Auction not found");
+  if (!auction) throw new CustomError("Auction not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
   if (auction.status !== "upcoming")
-    throw new Error("Auction cannot be updated after it starts");
+    throw new CustomError("Auction cannot be updated after it starts", HTTP_STATUS.BAD_REQUEST, ErrorCode.AUCTION_NOT_ACTIVE);
 
   if (auction.bidIds.length > 0)
-    throw new Error("Cannot update auction with existing bids");
+    throw new CustomError("Cannot update auction with existing bids", HTTP_STATUS.BAD_REQUEST, ErrorCode.AUCTION_HAS_BIDS);
 
   const inventory = auction.inventoryId as any;
 
   if (updates.basePrice !== undefined && inventory.price > updates.basePrice)
-    throw new Error("Base price must be greater than inventory price");
+    throw new CustomError("Base price must be greater than inventory price", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
 
   if (updates.startDate) {
     const sDate = new Date(updates.startDate);
-    if (sDate < new Date()) throw new Error("Start date cannot be in the past");
+    if (sDate < new Date()) throw new CustomError("Start date cannot be in the past", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
     auction.startDate = sDate;
   }
 
   if (updates.endDate) {
     const eDate = new Date(updates.endDate);
     if (eDate <= auction.startDate)
-      throw new Error("End date must be after start date");
+      throw new CustomError("End date must be after start date", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
     auction.endDate = eDate;
   }
 
@@ -143,6 +146,7 @@ export const updateAuctionService = async (
   }
 
   await auction.save();
+  logger.info("Auction updated", { auctionId });
   return auction;
 };
 
@@ -154,10 +158,10 @@ export const deleteAuctionService = async (auctionId: string) => {
 
   try {
     const auction = await Auction.findById(auctionId).session(session);
-    if (!auction) throw new Error("Auction not found");
+    if (!auction) throw new CustomError("Auction not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
     if (auction.bidIds.length > 0)
-      throw new Error("Cannot delete auction with existing bids");
+      throw new CustomError("Cannot delete auction with existing bids", HTTP_STATUS.BAD_REQUEST, ErrorCode.AUCTION_HAS_BIDS);
 
     await Inventory.findByIdAndUpdate(
       auction.inventoryId,
@@ -169,6 +173,8 @@ export const deleteAuctionService = async (auctionId: string) => {
 
     await session.commitTransaction();
     session.endSession();
+
+    logger.info("Auction deleted", { auctionId });
 
   } catch (error) {
     await session.abortTransaction();
