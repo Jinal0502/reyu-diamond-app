@@ -5,6 +5,7 @@ import { Bid } from "../models/Bid.model";
 import { createDealService } from "./deal.service";
 import logger from "../utils/logger";
 import { CustomError, ErrorCode, HTTP_STATUS } from "../utils";
+import * as NotificationEvents from "../notifications/events";
 
 export type BidAction = "ACCEPT" | "REJECT" | "EXPIRE";
 
@@ -19,7 +20,7 @@ export const createBidService = async ({
   buyerId,
   bidAmount,
 }: CreateBidInput) => {
-  const maxRetries = 3;
+  const maxRetries = 5;
   let attempt = 0;
 
   while (attempt < maxRetries) {
@@ -48,6 +49,13 @@ export const createBidService = async ({
       const currentPrice = auction.currentBid ?? auction.basePrice;
       if (bidAmount <= currentPrice)
         throw new CustomError(`Bid must be higher than ${currentPrice}`, HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
+
+      // 🏁 Satisfy unique index: Cancel previous active bids from this user
+      await Bid.updateMany(
+        { auctionId, buyerId, status: "ACTIVE" },
+        { $set: { status: "REJECTED" } },
+        { session }
+      );
 
       // Create bid temporarily not highest
       const [bid] = await Bid.create(
@@ -84,6 +92,8 @@ export const createBidService = async ({
         await session.abortTransaction();
         session.endSession();
         attempt++;
+        // 🏁 Add small random delay (backoff) to prevent repeat collisions
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 100 * attempt));
         continue;
       }
 
@@ -107,6 +117,21 @@ export const createBidService = async ({
       session.endSession();
 
       logger.info("Bid created", { bidId: bid._id, auctionId, buyerId, bidAmount });
+
+      // ================================
+      // 🔥 NOTIFICATIONS
+      // ================================
+      const inventory = await Inventory.findById(auction.inventoryId).select("title").lean();
+      const diamondName = inventory?.title || "Diamond";
+
+      // 1. Notify Seller
+      NotificationEvents.notifyNewBid(auction.sellerId.toString(), bidAmount, diamondName);
+
+      // 2. Notify Previous Highest Bidder (Outbid)
+      if (auction.highestBidderId && auction.highestBidderId.toString() !== buyerId) {
+        NotificationEvents.notifyOutbid(auction.highestBidderId.toString(), diamondName);
+      }
+
       return bid;
     } catch (error: any) {
       await session.abortTransaction();

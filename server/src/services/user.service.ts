@@ -45,18 +45,17 @@ export const saveFcmTokenService = async (
     throw new CustomError("FCM token is required", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
   }
 
-  const user = await User.findById(userId);
+  // Use $addToSet for atomic, unique addition to the array
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    { $addToSet: { fcmTokens: fcmToken } },
+    { new: true, runValidators: true }
+  );
 
-  if (!user) {
+  if (!updatedUser) {
     throw new CustomError("User not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
   }
 
-  const alreadyExists = user.fcmTokens?.includes(fcmToken);
-
-  if (!alreadyExists) {
-    user?.fcmTokens?.push(fcmToken);
-    await user.save();
-  }
-
-  return user.fcmTokens;
+  logger.info("FCM token stored successfully", { userId, token: fcmToken });
+  return updatedUser.fcmTokens;
 };

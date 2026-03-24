@@ -1,14 +1,15 @@
 import mongoose from "mongoose";
 import { Deal, DealStatus, DEAL_TRANSITIONS } from "../models/Deal.model";
-import {User} from "../models/User.model";
+import { User } from "../models/User.model";
 import { Bid } from "../models/Bid.model";
 import { Auction } from "../models/Auction.model";
 import { Inventory } from "../models/Inventory.model";
 import Escrow from "../models/Escrow.model";
-import { releaseEscrowService , refundEscrowService } from "../services/escrow.service";
-import { handleDealCancelled} from "./user-stats.service";
+import { releaseEscrowService, refundEscrowService } from "../services/escrow.service";
+import { handleDealCancelled } from "./user-stats.service";
 import logger from "../utils/logger";
 import { CustomError, ErrorCode, HTTP_STATUS } from "../utils";
+import * as NotificationEvents from "../notifications/events";
 
 /**
  * Deal will be created automatically when bid is ACCEPTED
@@ -62,6 +63,11 @@ export const createDealService = async (
   );
 
   logger.info("Deal created", { dealId: deal._id, bidId, sellerId, buyerId: bid.buyerId });
+
+  // 🔥 Notifications
+  NotificationEvents.notifyDealCreated(bid.buyerId.toString(), deal._id.toString());
+  NotificationEvents.notifyDealCreated(sellerId, deal._id.toString());
+
   return deal;
 };
 
@@ -154,6 +160,24 @@ export const updateDealStatusService = async (
 
     await deal.save({ session });
 
+    // 🔥 Notifications
+    const buyerIdStr = deal.buyerId.toString();
+    const sellerIdStr = deal.sellerId.toString();
+
+    // Fetch diamond name for better notification body
+    const inventory = await Inventory.findById(deal.inventoryId).select("title").lean();
+    const dName = inventory?.title || "Diamond";
+
+    if (newStatus === "SHIPPED") {
+      NotificationEvents.notifyDealShipped(buyerIdStr, dName, dealId);
+    } else if (newStatus === "DELIVERED") {
+      NotificationEvents.notifyDealDelivered(sellerIdStr, dName, dealId);
+    } else if (newStatus === "DISPUTED") {
+      NotificationEvents.notifyDisputeRaised(buyerIdStr, dealId);
+      NotificationEvents.notifyDisputeRaised(sellerIdStr, dealId);
+      NotificationEvents.notifyCriticalSystemError(`Dispute raised on Deal #${dealId} by ${role} ${userId}`);
+    }
+
     await session.commitTransaction();
     session.endSession();
 
@@ -238,7 +262,7 @@ export const cancelDealService = async (
       session.endSession();
 
       // refund service uses its own transaction
-      return await refundEscrowService(dealId, userId, role , note!);
+      return await refundEscrowService(dealId, userId, role, note!);
     }
 
     // if payment was initiated but not held
@@ -254,19 +278,23 @@ export const cancelDealService = async (
       status: "CANCELLED",
       changedBy: userId as any,
       changedAt: new Date(),
-      note : note || ""
+      note: note || ""
     });
 
     await deal.save({ session });
 
     await session.commitTransaction();
     session.endSession();
-    
+
     await handleDealCancelled({
       cancelledBy: userId as any,
       buyerId: deal.buyerId,
       sellerId: deal.sellerId
     });
+
+    // 🔥 Notification
+    const otherPartyId = isBuyer ? deal.sellerId.toString() : deal.buyerId.toString();
+    NotificationEvents.notifyDealCancelled(otherPartyId, dealId, note);
 
     logger.info("Deal cancelled", { dealId, cancelledBy: userId });
     return {
@@ -325,7 +353,7 @@ export const raiseDisputeService = async (
       status: "DISPUTED",
       changedBy: userId as any,
       changedAt: new Date(),
-      note : note || ""
+      note: note || ""
     });
 
     await deal.save({ session });
@@ -371,8 +399,8 @@ export const resolveDisputeService = async (
   // update dispute resolution fields
   deal.dispute = {
     ...deal.dispute,
-    reason : deal.dispute?.reason!,
-    raisedBy: deal.dispute?.raisedBy! ,
+    reason: deal.dispute?.reason!,
+    raisedBy: deal.dispute?.raisedBy!,
     raisedAt: deal.dispute?.raisedAt!,
     resolvedBy: userId as any,
     resolvedAt: new Date(),
@@ -384,13 +412,18 @@ export const resolveDisputeService = async (
 
   logger.info("Dispute resolved", { dealId, resolution, resolvedBy: userId });
 
+  // 🔥 Notification
+  const resText = resolution === "REFUND_BUYER" ? "Refund approved for Buyer" : "Funds released to Seller";
+  NotificationEvents.notifyDisputeResolved(deal.buyerId.toString(), dealId, resText);
+  NotificationEvents.notifyDisputeResolved(deal.sellerId.toString(), dealId, resText);
+
   // now execute action based on resolution
   if (resolution === "REFUND_BUYER") {
-    return await refundEscrowService(dealId, userId, role , note!);
+    return await refundEscrowService(dealId, userId, role, note!);
   }
 
   if (resolution === "RELEASE_SELLER") {
-    return await releaseEscrowService(dealId, userId, role , note!);
+    return await releaseEscrowService(dealId, userId, role, note!);
   }
 
   throw new CustomError("Invalid resolution type", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);

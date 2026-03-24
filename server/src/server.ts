@@ -1,4 +1,4 @@
-import express, { type Application, type Request, type Response , type NextFunction } from "express";
+import express, { type Application, type Request, type Response, type NextFunction } from "express";
 import dotenv from "dotenv";
 import http from "http";
 import helmet from "helmet";
@@ -6,7 +6,7 @@ import { Server } from "socket.io";
 import { setupSocket } from "./socket/socket";
 import { apiLimiter } from "./middlewares/rateLimit.middleware";
 import connectDB from "./config/db.js";
-import cors , { CorsOptions } from "cors";
+import cors, { CorsOptions } from "cors";
 import routes from "./routes/index.routes.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
 import { stripeWebhookController } from "./controllers/stripe.webhook.controller.js";
@@ -20,7 +20,7 @@ const app: Application = express();
 
 // CORS options
 const corsOptions: CorsOptions = {
-  origin: process.env.CORS_ORIGIN || 'http://localhost:8080',
+  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   credentials: true
 };
 

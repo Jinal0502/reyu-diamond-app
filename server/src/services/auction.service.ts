@@ -116,27 +116,47 @@ export const updateAuctionService = async (
   const auction = await Auction.findById(auctionId).populate("inventoryId");
   if (!auction) throw new CustomError("Auction not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
 
-  if (auction.status !== "upcoming")
-    throw new CustomError("Auction cannot be updated after it starts", HTTP_STATUS.BAD_REQUEST, ErrorCode.AUCTION_NOT_ACTIVE);
-
-  if (auction.bidIds.length > 0)
-    throw new CustomError("Cannot update auction with existing bids", HTTP_STATUS.BAD_REQUEST, ErrorCode.AUCTION_HAS_BIDS);
+  // 🏁 Block updates ONLY if auction is fundamentally closed
+  if (auction.status === "ended" || auction.status === "cancelled") {
+    throw new CustomError("Cannot update a completed or cancelled auction", HTTP_STATUS.BAD_REQUEST, ErrorCode.AUCTION_NOT_ACTIVE);
+  }
 
   const inventory = auction.inventoryId as any;
 
-  if (updates.basePrice !== undefined && inventory.price > updates.basePrice)
-    throw new CustomError("Base price must be greater than inventory price", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
+  // 🏗️ Handle Base Price (Only if not started and no bids)
+  if (updates.basePrice !== undefined) {
+    if (auction.status !== "upcoming")
+      throw new CustomError("Cannot update base price once auction has started", HTTP_STATUS.BAD_REQUEST, ErrorCode.AUCTION_NOT_ACTIVE);
+    
+    if (auction.bidIds.length > 0)
+      throw new CustomError("Cannot update base price after bids are placed", HTTP_STATUS.BAD_REQUEST, ErrorCode.AUCTION_HAS_BIDS);
 
+    if (inventory.price > updates.basePrice)
+      throw new CustomError("Base price must be greater than inventory price", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
+
+    auction.basePrice = updates.basePrice;
+    auction.currentBid = updates.basePrice;
+  }
+
+  // 📅 Handle Start Date (Only if upcoming)
   if (updates.startDate) {
+    if (auction.status !== "upcoming")
+      throw new CustomError("Cannot update start date after auction has started", HTTP_STATUS.BAD_REQUEST, ErrorCode.AUCTION_NOT_ACTIVE);
+
     const sDate = new Date(updates.startDate);
     if (sDate < new Date()) throw new CustomError("Start date cannot be in the past", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
     auction.startDate = sDate;
   }
 
+  // ⌛ Handle End Date (ALLOWED for active auctions to extend)
   if (updates.endDate) {
     const eDate = new Date(updates.endDate);
     if (eDate <= auction.startDate)
       throw new CustomError("End date must be after start date", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
+    
+    if (eDate <= new Date())
+      throw new CustomError("New end date cannot be in the past", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
+
     auction.endDate = eDate;
   }
 

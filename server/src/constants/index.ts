@@ -86,6 +86,11 @@ export enum SuccessCode {
 
   // Badge
   BADGES_FETCHED = "BADGES_FETCHED",
+
+  // Notification
+  MARK_AS_READ = "MARK_AS_READ",
+  MARK_ALL_AS_READ = "MARK_ALL_AS_READ",
+  UNREAD_COUNT = "UNREAD_COUNT",
 }
 
 /* ================= ERROR CODES ================= */
@@ -341,4 +346,9 @@ export const SUCCESS_MESSAGES: Record<SuccessCode, string> = {
 
   // Badge
   [SuccessCode.BADGES_FETCHED]: "Badges fetched successfully",
+
+  // Notification
+  [SuccessCode.MARK_AS_READ]: "Notification marked as read",
+  [SuccessCode.MARK_ALL_AS_READ]: "All notifications marked as read",
+  [SuccessCode.UNREAD_COUNT]: "Unread notification count fetched",
 };

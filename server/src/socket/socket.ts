@@ -2,6 +2,7 @@ import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
+import * as ChatService from "../services/chat.service";
 
 import Conversation from "../models/Chat.conversation.model";
 import Message from "../models/Chat.message.model";
@@ -10,7 +11,10 @@ import logger from "../utils/logger";
 
 dotenv.config();
 
+let ioInstance: Server | null = null;
+
 export const setupSocket = (io: Server) => {
+  ioInstance = io;
   // JWT Middleware
   io.use((socket: any, next) => {
     try {
@@ -89,46 +93,12 @@ export const setupSocket = (io: Server) => {
         attachments?: any[];
       }) => {
         try {
-          if (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId)) {
-            throw new CustomError("Invalid conversationId", 400);
-          }
-
-          if (!text || text.trim().length === 0) {
-            throw new CustomError("Message text is required", 400);
-          }
-
-          const conversation: any = await Conversation.findById(conversationId);
-
-          if (!conversation) throw new CustomError("Conversation not found", 404);
-
-          const isParticipant = conversation.participantIds.some((id: any) =>
-            id.equals(userId)
-          );
-
-          if (!isParticipant) throw new CustomError("Not allowed", 403);
-
-          const newMessage = await Message.create({
+          const newMessage = await ChatService.sendMessageService({
             conversationId,
             senderId: userId,
             text,
-            attachments: attachments || [],
-            status: "SENT",
-            sentAt: new Date(),
-            from: userId,
-            read: false,
+            attachments,
           });
-
-          conversation.lastMessageText = text;
-          conversation.lastMessageAt = new Date();
-
-          conversation.userSettings = conversation.userSettings.map((setting: any) => {
-            if (setting.userId.toString() !== userId.toString()) {
-              setting.unreadCount = (setting.unreadCount || 0) + 1;
-            }
-            return setting;
-          });
-
-          await conversation.save();
 
           io.to(conversationId).emit("newMessage", newMessage);
 
@@ -150,44 +120,10 @@ export const setupSocket = (io: Server) => {
       "markAsRead",
       async ({ conversationId }: { conversationId: string }) => {
         try {
-          if (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId)) {
-            throw new CustomError("Invalid conversationId", 400);
-          }
-
-          const conversation: any = await Conversation.findById(conversationId);
-
-          if (!conversation) throw new CustomError("Conversation not found", 404);
-
-          const isParticipant = conversation.participantIds.some((id: any) =>
-            id.equals(userId)
-          );
-
-          if (!isParticipant) throw new CustomError("Not allowed", 403);
-
-          await Message.updateMany(
-            {
-              conversationId: new mongoose.Types.ObjectId(conversationId),
-              senderId: { $ne: new mongoose.Types.ObjectId(userId) },
-              readAt: null,
-            },
-            {
-              $set: {
-                readAt: new Date(),
-                status: "READ",
-                read: true,
-              },
-            }
-          );
-
-          conversation.userSettings = conversation.userSettings.map((setting: any) => {
-            if (setting.userId.toString() === userId.toString()) {
-              setting.unreadCount = 0;
-              setting.lastReadAt = new Date();
-            }
-            return setting;
+          await ChatService.markConversationAsReadService({
+            conversationId,
+            userId,
           });
-
-          await conversation.save();
 
           io.to(conversationId).emit("messagesRead", {
             conversationId,
@@ -213,3 +149,5 @@ export const setupSocket = (io: Server) => {
     });
   });
 };
+
+export const getIO = () => ioInstance;

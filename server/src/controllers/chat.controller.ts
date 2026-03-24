@@ -51,7 +51,11 @@ export const getConversationMessagesController = async (req: Request, res: Respo
 
 export const getUserConversationsController = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const conversations = await ChatService.getUserConversationsService((req as any).user._id);
+    const conversations = await ChatService.getUserConversationsService({
+      userId: (req as any).user._id,
+      page: Number(req.query.page || 1),
+      limit: Number(req.query.limit || 20),
+    });
     return sendResponse(res, 200, true, SUCCESS_MESSAGES[SuccessCode.CONVERSATIONS_FETCHED], conversations, undefined, SuccessCode.CONVERSATIONS_FETCHED);
   } catch (error) {
     next(error);

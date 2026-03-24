@@ -4,6 +4,7 @@ import { stripe } from "../config/stripe";
 import Escrow from "../models/Escrow.model";
 import { Deal } from "../models/Deal.model";
 import logger from "../utils/logger";
+import * as NotificationEvents from "../notifications/events";
 
 export const stripeWebhookController = async (req: Request, res: Response) => {
   const sig = req.headers["stripe-signature"];
@@ -52,7 +53,11 @@ export const stripeWebhookController = async (req: Request, res: Response) => {
             changedAt : new Date(),
           });
           await deal.save();
+          await deal.save();
           logger.info("Payment succeeded, deal moved to IN_ESCROW", { dealId: deal._id, paymentIntentId: paymentIntent.id });
+
+          // 🔥 Notification
+          NotificationEvents.notifyPaymentReceived(deal.sellerId.toString(), deal.dealAmount, deal._id.toString());
         }
 
         break;
@@ -82,7 +87,11 @@ export const stripeWebhookController = async (req: Request, res: Response) => {
             changedAt: new Date(),
           });
           await deal.save();
+          await deal.save();
           logger.warn("Payment failed, deal marked PAYMENT_FAILED", { dealId: deal._id, paymentIntentId: paymentIntent.id });
+
+          // 🔥 Notification
+          NotificationEvents.notifyAdStatusUpdate(deal.buyerId.toString(), `Deal #${deal._id}`, "PAYMENT_FAILED");
         }
 
         break;

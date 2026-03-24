@@ -6,6 +6,7 @@ import { CustomError, HTTP_STATUS, ErrorCode } from "../utils";
 import { updateBadgesForUser } from "./badge.service";
 import { handleRatingSubmitted} from "./user-stats.service";
 import logger from "../utils/logger";
+import * as NotificationEvents from "../notifications/events";
 
 interface CreateRatingInput {
   userId: string | Types.ObjectId;
@@ -93,6 +94,12 @@ export const createRatingService = async ({
   // update user rating stats
   await handleRatingSubmitted(targetUserId);
   logger.info("Rating submitted", { ratingId: created._id, targetUserId, raterId, dealId, rating });
+
+  // 🔥 Notification
+  const rater = await User.findById(raterId).select("name").lean();
+  const raterName = isAnonymous ? "Anonymous User" : (rater?.name || "A User");
+  NotificationEvents.notifyNewRating(targetUserId.toString(), rating, raterName);
+
   return created;
 };
 

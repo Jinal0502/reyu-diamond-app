@@ -3,6 +3,8 @@ import Conversation from "../models/Chat.conversation.model";
 import Message from "../models/Chat.message.model";
 import { CustomError, HTTP_STATUS, ErrorCode } from "../utils";
 import logger from "../utils/logger";
+import * as NotificationEvents from "../notifications/events";
+import { User } from "../models/User.model";
 
 /**
  * Initiate Conversation (Requirement/Deal)
@@ -74,18 +76,7 @@ export const sendMessageService = async ({
   if (!senderId) throw new CustomError("senderId is required", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
   if (!text) throw new CustomError("text is required", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
 
-  const conversation: any = await Conversation.findById(conversationId);
-  if (!conversation) throw new CustomError("Conversation not found", HTTP_STATUS.NOT_FOUND, ErrorCode.CONVERSATION_NOT_FOUND);
-
-  // check sender is participant
-  const isParticipant = conversation.participantIds.some((id: any) =>
-  id.equals(senderId)
-    );
-
-  if (!isParticipant) {
-    throw new CustomError("Not allowed to send message in this chat", HTTP_STATUS.FORBIDDEN, ErrorCode.NOT_CONVERSATION_PARTICIPANT);
-  }
-
+  // 1. Create message
   const message = await Message.create({
     conversationId: new mongoose.Types.ObjectId(conversationId),
     senderId: new mongoose.Types.ObjectId(senderId),
@@ -98,19 +89,46 @@ export const sendMessageService = async ({
     sentAt: new Date(),
   });
 
-  // update conversation last message
-  conversation.lastMessageText = text.substring(0, 100);
-  conversation.lastMessageAt = message.sentAt;
-
-  // update unread count for other participant
-  conversation.userSettings = conversation.userSettings.map((setting: any) => {
-    if (setting.userId.toString() !== senderId) {
-      setting.unreadCount = (setting.unreadCount || 0) + 1;
+  // 2. Atomic update of conversation
+  // Update last message info and increment unread count for other participants
+  const updateResult = await Conversation.findOneAndUpdate(
+    {
+      _id: new mongoose.Types.ObjectId(conversationId),
+      participantIds: new mongoose.Types.ObjectId(senderId), // ensure sender is participant
+    },
+    {
+      $set: {
+        lastMessageText: text.substring(0, 100),
+        lastMessageAt: message.sentAt,
+      },
+      $inc: {
+        "userSettings.$[elem].unreadCount": 1
+      }
+    },
+    {
+      new: true,
+      arrayFilters: [{ "elem.userId": { $ne: new mongoose.Types.ObjectId(senderId) } }]
     }
-    return setting;
-  });
+  );
 
-  await conversation.save();
+  if (!updateResult) {
+    throw new CustomError("Conversation not found or user not allowed", HTTP_STATUS.FORBIDDEN, ErrorCode.NOT_CONVERSATION_PARTICIPANT);
+  }
+
+  // 🔥 Notifications
+  const sender = await User.findById(senderId).select("name").lean();
+  const senderName = sender?.name || "Someone";
+  
+  const recipientId = updateResult.participantIds.find(id => id.toString() !== senderId.toString());
+  
+  if (recipientId) {
+    NotificationEvents.notifyChatMessage(
+        recipientId.toString(), 
+        senderName, 
+        text, 
+        conversationId
+    );
+  }
 
   return message;
 };
@@ -129,15 +147,14 @@ export const getConversationMessagesService = async ({
   page?: number;
   limit?: number;
 }) => {
-  const conversation: any = await Conversation.findById(conversationId);
-  if (!conversation) throw new CustomError("Conversation not found", HTTP_STATUS.NOT_FOUND, ErrorCode.CONVERSATION_NOT_FOUND);
-
-  const isParticipant = conversation.participantIds.some((id: any) =>
-  id.equals(userId)
-    );
+  // Verify participation using lean check
+  const isParticipant = await Conversation.exists({
+    _id: new mongoose.Types.ObjectId(conversationId),
+    participantIds: new mongoose.Types.ObjectId(userId)
+  }).lean();
 
   if (!isParticipant) {
-    throw new CustomError("Not allowed to view this conversation", HTTP_STATUS.FORBIDDEN, ErrorCode.NOT_CONVERSATION_PARTICIPANT);
+    throw new CustomError("Not allowed to view this conversation or conversation not found", HTTP_STATUS.FORBIDDEN, ErrorCode.NOT_CONVERSATION_PARTICIPANT);
   }
 
   const skip = (page - 1) * limit;
@@ -146,23 +163,36 @@ export const getConversationMessagesService = async ({
     conversationId: new mongoose.Types.ObjectId(conversationId),
     deletedAt: null,
   })
-    .sort({ sentAt: 1 })
+    .sort({ sentAt: -1 }) // Get latest messages first for better chat UI performance
     .skip(skip)
     .limit(limit)
-    .populate("senderId", "firstName lastName email");
+    .populate("senderId", "firstName lastName email")
+    .lean();
 
   return messages;
 };
 
 /**
- * Get User Conversations List
+ * Get User Conversations List (Pagination)
  */
-export const getUserConversationsService = async (userId: string) => {
+export const getUserConversationsService = async ({
+  userId,
+  page = 1,
+  limit = 20
+}: {
+  userId: string;
+  page?: number;
+  limit?: number;
+}) => {
+  const skip = (page - 1) * limit;
   const conversations = await Conversation.find({
     participantIds: new mongoose.Types.ObjectId(userId),
   })
     .sort({ updatedAt: -1 })
-    .populate("participantIds", "firstName lastName email");
+    .skip(skip)
+    .limit(limit)
+    .populate("participantIds", "firstName lastName email")
+    .lean();
 
   return conversations;
 };
@@ -170,7 +200,6 @@ export const getUserConversationsService = async (userId: string) => {
 /**
  * Mark Conversation as Read
  */
-
 export const markConversationAsReadService = async ({
   conversationId,
   userId,
@@ -180,19 +209,29 @@ export const markConversationAsReadService = async ({
 }) => {
   if (!conversationId) throw new CustomError("conversationId is required", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
 
-  const conversation = await Conversation.findById(conversationId);
-
-  if (!conversation) throw new CustomError("Conversation not found", HTTP_STATUS.NOT_FOUND, ErrorCode.CONVERSATION_NOT_FOUND);
-
-  const isParticipant = conversation.participantIds.some((id: any) =>
-    id.equals(userId)
+  // 1. Atomic update of conversation: reset unreadCount and update lastReadAt
+  const updateResult = await Conversation.findOneAndUpdate(
+    {
+      _id: new mongoose.Types.ObjectId(conversationId),
+      participantIds: new mongoose.Types.ObjectId(userId)
+    },
+    {
+      $set: {
+        "userSettings.$[elem].unreadCount": 0,
+        "userSettings.$[elem].lastReadAt": new Date()
+      }
+    },
+    {
+      arrayFilters: [{ "elem.userId": new mongoose.Types.ObjectId(userId) }],
+      new: true
+    }
   );
 
-  if (!isParticipant) {
-    throw new CustomError("Not allowed", HTTP_STATUS.FORBIDDEN, ErrorCode.NOT_CONVERSATION_PARTICIPANT);
+  if (!updateResult) {
+    throw new CustomError("Conversation not found or user not allowed", HTTP_STATUS.FORBIDDEN, ErrorCode.NOT_CONVERSATION_PARTICIPANT);
   }
 
-  // mark messages as READ (only messages not sent by me)
+  // 2. Mark messages as READ (only messages not sent by me)
   await Message.updateMany(
     {
       conversationId: new mongoose.Types.ObjectId(conversationId),
@@ -207,21 +246,10 @@ export const markConversationAsReadService = async ({
       $set: {
         readAt: new Date(),
         status: "READ",
-        read : true,
+        read: true,
       },
     }
   );
-
-  // reset unreadCount for this user
-  conversation.userSettings = conversation.userSettings.map((setting: any) => {
-    if (setting.userId.equals(userId)) {
-      setting.unreadCount = 0;
-      setting.lastReadAt = new Date();
-    }
-    return setting;
-  });
-
-  await conversation.save();
 
   return true;
 };

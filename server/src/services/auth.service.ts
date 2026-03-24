@@ -136,6 +136,8 @@ export const loginUser = async (
 
   logger.info("User logged in", { userId: user._id, email: user.email, role: user.role });
 
+  const isAdmin = user.role === "admin";
+
   return {
     _id: user._id.toString(),
     name: user.name,
@@ -143,7 +145,7 @@ export const loginUser = async (
     role: user.role,
     isKycVerified: user.isKycVerified,
     isEmailVerified: user.isEmailVerified,
-    kycStatus: kyc?.status || "not_submitted",
+    kycStatus: isAdmin ? "approved" : kyc?.status || "not_submitted",
   };
 };
 

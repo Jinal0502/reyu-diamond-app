@@ -49,6 +49,25 @@ export const errorHandler = (
     return sendResponse(res, 409, false, message, null);
   }
 
+  /* ================= MONGOOSE VALIDATION ERROR ================= */
+  if (err?.name === "ValidationError") {
+    const errors: Record<string, string> = {};
+    Object.keys(err.errors).forEach((key) => {
+      errors[key] = err.errors[key].message;
+    });
+
+    logger.warn("Mongoose validation error", { errors, path: req.path });
+    return sendResponse(
+      res,
+      400,
+      false,
+      "Validation Failed",
+      null,
+      errors,
+      "VALIDATION_ERROR"
+    );
+  }
+
   /* ================= DEFAULT ERROR ================= */
   const statusCode = err.statusCode || 500;
 

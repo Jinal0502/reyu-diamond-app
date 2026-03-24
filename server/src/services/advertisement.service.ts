@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { Advertisement } from "../models/Advertisement.model";
 import { CustomError, HTTP_STATUS, ErrorCode } from "../utils";
 import logger from "../utils/logger";
+import * as NotificationEvents from "../notifications/events";
 
   //  REQUEST AD
 
@@ -131,6 +132,9 @@ export const updateAdStatusService = async ({
   }
 
   await ad.save();
+
+  // 🔥 Notification
+  NotificationEvents.notifyAdStatusUpdate(ad.advertiserId.toString(), ad.title, ad.status);
 
   logger.info("Advertisement status updated", { adId, action, adminId });
   return ad;

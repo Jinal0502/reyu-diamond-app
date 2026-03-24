@@ -4,6 +4,7 @@ import { User } from "../models/User.model";
 import { deleteSingleFile, CustomError, HTTP_STATUS, ErrorCode } from "../utils";
 import crypto from "crypto";
 import logger from "../utils/logger";
+import * as NotificationEvents from "../notifications/events";
 
 interface IUserPopulated {
   _id: Types.ObjectId;
@@ -115,6 +116,10 @@ export const submitKyc = async (
   }
 
   logger.info("KYC submitted", { userId });
+
+  // 🔥 Notification for Admins
+  NotificationEvents.notifyKycSubmitted(data.firstName + " " + data.lastName, userId);
+
   return updatedKyc;
 };
 
@@ -152,6 +157,10 @@ export const verifyKyc = async (
   });
 
   logger.info("KYC decision made", { kycId, decision, adminId });
+
+  // 🔥 Notification
+  NotificationEvents.notifyKycStatus(kyc.userId._id.toString(), decision.toUpperCase() as any, reason);
+
   return kyc;
 };
 

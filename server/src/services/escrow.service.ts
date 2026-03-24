@@ -10,6 +10,8 @@ import {
   handleDealCancelled,
 } from "./user-stats.service";
 import logger from "../utils/logger";
+import * as NotificationEvents from "../notifications/events";
+
 
 /* =======================================================
    CREATE PAYMENT INTENT
@@ -46,8 +48,8 @@ export const createPaymentIntentForDealService = async (
     payment_method_types: ["card"],
     transfer_group: `deal_${dealId}`,
     metadata: {
-      dealId,
-      buyerId,
+      dealId: dealId.toString(),
+      buyerId: buyerId.toString(),
       sellerId: deal.sellerId.toString(),
     },
   });
@@ -161,6 +163,9 @@ export const releaseEscrowService = async (
     await handleBuyerDealCompleted(deal.buyerId);
 
     logger.info("Escrow released, deal completed", { dealId, transferId: transfer.id });
+
+    // 🔥 Notification
+    NotificationEvents.notifyEscrowReleased(deal.sellerId.toString(), dealId);
 
     return {
       deal,
