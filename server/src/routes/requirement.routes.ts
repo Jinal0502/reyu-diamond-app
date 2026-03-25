@@ -26,7 +26,7 @@ router.post(
   RequirementController.createRequirement
 );
 
-router.put(
+router.patch(
   "/:requirementId",
   kycVerifiedOnly,
   validate(updateRequirementSchema),

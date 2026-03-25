@@ -3,3 +3,4 @@ secrets/
 dist/
 node_modules/
 seeder/
+logs/

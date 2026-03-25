@@ -104,8 +104,8 @@ export const updateRequirementSchema = z.object({
 
   body: z
     .object({
-      intent: intentSchema.optional(),
-      constraints: constraintsSchema.optional(),
+      intent: intentSchema.partial().optional(),
+      constraints: constraintsSchema.partial().optional(),
       preferences: preferencesSchema.optional(),
       matchedInventoryIds: z.array(objectIdSchema).optional(),
     })

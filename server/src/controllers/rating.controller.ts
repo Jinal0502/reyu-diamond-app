@@ -1,55 +1,36 @@
 import { Request, Response, NextFunction } from "express";
 import * as RatingService from "../services/rating.serivce";
-import { sendResponse } from "../utils/api.response";
+import { sendResponse, SuccessCode, SUCCESS_MESSAGES } from "../utils";
 import mongoose from "mongoose";
 
-export const createRatingController = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const userId = req.params.userId as string;
-    const raterId = req.user._id;
+const param = (v: string | string[]) => (Array.isArray(v) ? v[0] : v);
 
+export const createRatingController = async (req: Request, res: Response, next: NextFunction) => {
+  try {
     const rating = await RatingService.createRatingService({
-      userId : new mongoose.Types.ObjectId(userId),
-      raterId,
+      userId: new mongoose.Types.ObjectId(param(req.params.userId)),
+      raterId: req.user._id,
       payload: req.body,
     });
-
-    return sendResponse(res, 201, true, "Rating submitted successfully", rating);
+    return sendResponse(res, 201, true, SUCCESS_MESSAGES[SuccessCode.RATING_SUBMITTED], rating, undefined, SuccessCode.RATING_SUBMITTED);
   } catch (error) {
     next(error);
   }
 };
 
-export const getRatingsController = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const getRatingsController = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const  userId  = req.params.userId as string;
-
-    const data = await RatingService.getRatingsService(new mongoose.Types.ObjectId(userId));
-
-    return sendResponse(res, 200, true, "Ratings fetched successfully", data);
+    const data = await RatingService.getRatingsService(new mongoose.Types.ObjectId(param(req.params.userId)));
+    return sendResponse(res, 200, true, SUCCESS_MESSAGES[SuccessCode.RATINGS_FETCHED], data, undefined, SuccessCode.RATINGS_FETCHED);
   } catch (error) {
     next(error);
   }
 };
 
-export const getMyRatingsController = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const getMyRatingsController = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const myId = req.user._id.toString();
-    const data = await RatingService.getRatingsService(myId);
-
-    return sendResponse(res, 200, true, "My ratings fetched successfully", data);
+    const data = await RatingService.getRatingsService(req.user._id.toString());
+    return sendResponse(res, 200, true, SUCCESS_MESSAGES[SuccessCode.RATINGS_FETCHED], data, undefined, SuccessCode.RATINGS_FETCHED);
   } catch (error) {
     next(error);
   }

@@ -1,5 +1,5 @@
 import rateLimit from "express-rate-limit";
-import { sendResponse } from "../utils/api.response";
+import { sendResponse } from "../utils";
 
 /* ================= GLOBAL API LIMIT ================= */
 

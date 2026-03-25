@@ -2,6 +2,8 @@ import puppeteer from "puppeteer";
 import cloudinary from "../config/cloudinary";
 import { Deal } from "../models/Deal.model";
 import { dealHtmlTemplate } from "../utils/templates/deal.template";
+import logger from "../utils/logger";
+import { CustomError, ErrorCode, HTTP_STATUS } from "../utils";
 
 export const generateAndUploadDealPdf = async (dealId: string) => {
   const deal = await Deal.findById(dealId)
@@ -12,7 +14,7 @@ export const generateAndUploadDealPdf = async (dealId: string) => {
     .populate("auctionId"); // ✅ ADDED
 
   if (!deal) {
-    throw new Error("Deal not found");
+    throw new CustomError("Deal not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
   }
 
   // Generate HTML
@@ -67,6 +69,8 @@ export const generateAndUploadDealPdf = async (dealId: string) => {
   // Save PDF URL
   deal.pdfPath = uploadResult.secure_url;
   await deal.save();
+
+  logger.info("Deal PDF generated and uploaded", { dealId, pdfUrl: uploadResult.secure_url });
 
   return {
     pdfUrl: uploadResult.secure_url,

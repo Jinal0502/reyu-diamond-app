@@ -18,6 +18,7 @@ import chatRoutes from "../routes/chat.routes";
 import ratingRoutes from "../routes/rating.routes";
 import badgeRoutes from "../routes/badge.routes";
 import adRoutes from "../routes/advertisement.routes";
+import notificationRoutes from "../routes/notification.routes";
 import { protect } from "../middlewares/auth.middleware";
 import {kycVerifiedOnly} from "../middlewares/kyc.middleware";
 
@@ -39,5 +40,6 @@ router.use("/chats" , protect , kycVerifiedOnly , chatRoutes);
 router.use("/ratings" , ratingRoutes);
 router.use("/badges" , badgeRoutes);
 router.use("/ads" , adRoutes);
+router.use("/notifications" , notificationRoutes);
 
 export default router;

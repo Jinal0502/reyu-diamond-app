@@ -3,26 +3,36 @@ import mongoose from "mongoose";
 import { Auction } from "../models/Auction.model";
 import { Inventory } from "../models/Inventory.model";
 import { createDealService } from "../services/deal.service";
+import logger from "../utils/logger";
+import * as NotificationEvents from "../notifications/events";
 
 export const initAuctionCron = () => {
-  console.log("Auction cron initialized");
+  logger.info("Auction cron initialized");
 
   cron.schedule("*/30 * * * * *", async () => {
-    console.log("Auction cron tick:", new Date());
-
     const now = new Date();
 
     try {
       // ================================
       // 1️⃣ START UPCOMING AUCTIONS
       // ================================
-      const started = await Auction.updateMany(
-        { status: "upcoming", startDate: { $lte: now } },
-        { status: "active" }
-      );
+      const upcomingToStart = await Auction.find({ 
+        status: "upcoming", 
+        startDate: { $lte: now } 
+      }).populate("inventoryId", "title");
 
-      if (started.modifiedCount > 0) {
-        console.log("Auctions activated:", started.modifiedCount);
+      if (upcomingToStart.length > 0) {
+        const ids = upcomingToStart.map(a => a._id);
+        await Auction.updateMany({ _id: { $in: ids } }, { status: "active" });
+        
+        logger.info("Auctions activated by cron", { count: upcomingToStart.length });
+
+        // 🔥 Notify All Users
+        for (const auction of upcomingToStart) {
+          NotificationEvents.notifyAuctionStarted(
+            (auction.inventoryId as any)?.title || "Diamond"
+          );
+        }
       }
 
       // ================================
@@ -33,9 +43,11 @@ export const initAuctionCron = () => {
         endDate: { $lte: now },
       });
 
-      if (auctionsToEnd.length === 0) return;
-
-      console.log("Auctions to end:", auctionsToEnd.length);
+      if (auctionsToEnd.length > 0) {
+        logger.info("Cron found auctions to end", { count: auctionsToEnd.length, auctionIds: auctionsToEnd.map(a => a._id) });
+      } else {
+        return;
+      }
 
       // ================================
       // 3️⃣ PROCESS EACH AUCTION
@@ -79,18 +91,40 @@ export const initAuctionCron = () => {
             inventory.locked = true;
             inventory.soldAt = now;
 
-            // Save inventory FIRST
             await inventory.save({ session });
 
-            // THEN create deal
             await createDealService(
               freshAuction.highestBidId.toString(),
               freshAuction.sellerId.toString(),
               session
             );
 
-            console.log("Deal created for auction:", freshAuction._id);
+            logger.info("Deal created for ended auction", { auctionId: freshAuction._id });
 
+            // 🔥 Notification to Winner
+            if (freshAuction.highestBidderId && freshAuction.highestBidId) {
+              NotificationEvents.notifyAuctionWon(
+                freshAuction.highestBidderId.toString(),
+                inventory.title || "Diamond",
+                freshAuction.highestBidId.toString()
+              );
+
+              // Notify other LOST bidders
+              const otherBidders = await Auction.findById(freshAuction._id)
+                .select("bidIds")
+                .populate({
+                  path: "bidIds",
+                  select: "buyerId",
+                  match: { buyerId: { $ne: freshAuction.highestBidderId } }
+                });
+              
+              if (otherBidders && (otherBidders as any).bidIds) {
+                const uniqueLosingBidders = [...new Set((otherBidders as any).bidIds.map((b: any) => b.buyerId.toString()))];
+                for (const bidderId of uniqueLosingBidders) {
+                  NotificationEvents.notifyAuctionClosedToBidders(bidderId as any, inventory.title || "Diamond");
+                }
+              }
+            }
           } else {
             // No bids
             inventory.status = "available";
@@ -98,7 +132,10 @@ export const initAuctionCron = () => {
 
             await inventory.save({ session });
 
-            console.log("Auction ended without bids:", freshAuction._id);
+            logger.info("Auction ended without bids", { auctionId: freshAuction._id });
+
+            // 🔥 Notification to Seller
+            NotificationEvents.notifyAuctionEndedNoWinner(freshAuction.sellerId.toString(), inventory.title || "Diamond");
           }
 
           await session.commitTransaction();
@@ -107,12 +144,12 @@ export const initAuctionCron = () => {
         } catch (error) {
           await session.abortTransaction();
           session.endSession();
-          console.error("Cron auction error:", error);
+          logger.error("Cron failed processing auction", { auctionId: auction._id, error });
         }
       }
 
     } catch (error) {
-      console.error("Auction cron global error:", error);
+      logger.error("Auction cron global error", { error });
     }
   });
 };

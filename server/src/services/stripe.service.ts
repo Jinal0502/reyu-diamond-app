@@ -1,51 +1,44 @@
 import { stripe } from "../config/stripe";
 import { User } from "../models/User.model";
+import { CustomError, ErrorCode, HTTP_STATUS } from "../utils";
+import logger from "../utils/logger";
 
 export const createStripeConnectedAccountService = async (userId: string) => {
   const user = await User.findById(userId);
 
   if (!user) {
-    throw new Error("User not found");
+    throw new CustomError("User not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
   }
 
-  // If already created
   if (user.stripeAccountId) {
-    return {
-      alreadyExists: true,
-      accountId: user.stripeAccountId,
-    };
+    return { alreadyExists: true, accountId: user.stripeAccountId };
   }
 
-  // Create Stripe connected account
   const account = await stripe.accounts.create({
     type: "express",
     country: "US",
     email: user.email,
-    capabilities: {
-      transfers: { requested: true },
-    },
+    capabilities: { transfers: { requested: true } },
   });
 
-  // Save to DB
   user.stripeAccountId = account.id;
   user.stripeOnboardingStatus = "PENDING";
   await user.save();
 
-  return {
-    alreadyExists: false,
-    accountId: account.id,
-  };
+  logger.info("Stripe connected account created", { userId, accountId: account.id });
+
+  return { alreadyExists: false, accountId: account.id };
 };
 
 export const generateOnboardingLinkService = async (userId: string) => {
   const user = await User.findById(userId);
 
   if (!user) {
-    throw new Error("User not found");
+    throw new CustomError("User not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
   }
 
   if (!user.stripeAccountId) {
-    throw new Error("Stripe connected account not created");
+    throw new CustomError("Stripe connected account not created", HTTP_STATUS.BAD_REQUEST, ErrorCode.STRIPE_ACCOUNT_NOT_CREATED);
   }
 
   const accountLink = await stripe.accountLinks.create({
@@ -55,31 +48,29 @@ export const generateOnboardingLinkService = async (userId: string) => {
     type: "account_onboarding",
   });
 
-  return {
-    url: accountLink.url,
-  };
+  return { url: accountLink.url };
 };
 
 export const checkStripeAccountStatusService = async (userId: string) => {
   const user = await User.findById(userId);
 
-  if (!user) throw new Error("User not found");
+  if (!user) {
+    throw new CustomError("User not found", HTTP_STATUS.NOT_FOUND, ErrorCode.NOT_FOUND);
+  }
 
   if (!user.stripeAccountId) {
-    throw new Error("Stripe account not created");
+    throw new CustomError("Stripe account not created", HTTP_STATUS.BAD_REQUEST, ErrorCode.STRIPE_ACCOUNT_NOT_CREATED);
   }
 
   const account = await stripe.accounts.retrieve(user.stripeAccountId);
 
-  const detailsSubmitted = account.details_submitted;
-  const chargesEnabled = account.charges_enabled;
-  const payoutsEnabled = account.payouts_enabled;
+  const { details_submitted: detailsSubmitted, charges_enabled: chargesEnabled, payouts_enabled: payoutsEnabled } = account;
 
-  // If fully verified
   if (detailsSubmitted && chargesEnabled && payoutsEnabled) {
     user.isKycVerified = true;
     user.stripeOnboardingStatus = "COMPLETED";
     await user.save();
+    logger.info("Stripe account fully verified", { userId, accountId: account.id });
   }
 
   return {
@@ -92,4 +83,3 @@ export const checkStripeAccountStatusService = async (userId: string) => {
     isKycVerified: user.isKycVerified,
   };
 };
-

@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { User } from "../models/User.model";
 import { updateBadgesForUser } from "./badge.service";
 import { Rating } from "../models/Rating.model";
+import logger from "../utils/logger";
 
 interface IUserStats {
   averageRating: number;
@@ -45,6 +46,7 @@ export const handleSellerDealCompleted = async (
   user.stats.reputationScore = calculateReputation(user.stats);
 
   await user.save();
+  logger.info("Seller stats updated after deal completed", { sellerId, dealAmount, reputationScore: user.stats.reputationScore });
   await updateBadgesForUser(user._id);
 };
 
@@ -59,6 +61,7 @@ export const handleBuyerDealCompleted = async (
   user.stats.reputationScore = calculateReputation(user.stats);
 
   await user.save();
+  logger.info("Buyer stats updated after deal completed", { buyerId, reputationScore: user.stats.reputationScore });
   await updateBadgesForUser(user._id);
 };
 
@@ -75,6 +78,7 @@ export const handleDealCancelled = async (
   user.stats.reputationScore = calculateReputation(user.stats);
 
   await user.save();
+  logger.info("User stats updated after deal cancelled", { cancelledBy, reputationScore: user.stats.reputationScore });
   await updateBadgesForUser(user._id);
 };
 
@@ -104,5 +108,6 @@ export const handleRatingSubmitted = async (
   user.stats.reputationScore = calculateReputation(user.stats);
 
   await user.save();
+  logger.info("User rating stats updated", { userId, avgRating, totalRatings, reputationScore: user.stats.reputationScore });
   await updateBadgesForUser(userId);
 };

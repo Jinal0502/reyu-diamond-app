@@ -1,7 +1,8 @@
 import {Response , NextFunction} from "express";
 import Conversation  from "../models/Chat.conversation.model";
-import { sendResponse } from "../utils/api.response";
+import { sendResponse } from "../utils";
 import mongoose from "mongoose";
+import logger from "../utils/logger";
 
 export const isConversationParticipant = async (req: any, res: Response, next: NextFunction) => {
   try {
@@ -32,7 +33,7 @@ export const isConversationParticipant = async (req: any, res: Response, next: N
     req.conversation = conversation;
     next();
   } catch (error) {
-    console.log("Chat Permission error : ", error);
+    logger.error("Chat permission authorization error", { conversationId: req.params?.conversationId, error });
     return sendResponse(res, 500, false, "Authorization failed");
   }
 };

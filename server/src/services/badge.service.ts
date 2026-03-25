@@ -3,6 +3,8 @@ import { Badge } from "../models/Badge.model";
 import { UserBadge } from "../models/UserBadge.model";
 import { Deal } from "../models/Deal.model";
 import { User } from "../models/User.model";
+import logger from "../utils/logger";
+import * as NotificationEvents from "../notifications/events";
 
 // Example badge rules
 // You can add more later in DB
@@ -54,6 +56,12 @@ export const updateBadgesForUser = async (userId: Types.ObjectId) => {
         isEarned,
         earnedAt: isEarned ? new Date() : null,
       });
+
+      if (isEarned) {
+        logger.info("Badge earned by user", { userId, badgeId: badge.badgeId, badgeName: badge.name });
+        // 🔥 Notification
+        NotificationEvents.notifyBadgeEarned(userId.toString(), badge.name);
+      }
     } else {
       await UserBadge.updateOne(
         { _id: already._id },
