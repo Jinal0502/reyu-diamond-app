@@ -9,26 +9,29 @@ import * as NotificationEvents from "../notifications/events";
 // Example badge rules
 // You can add more later in DB
 const badgeCriteriaCheck = async (userId: Types.ObjectId, criteria: any) => {
-  const stats = await User.findById(userId).select("stats");
-  if (!stats) return false;
+  const user = await User.findById(userId).select("stats");
+  if (!user || !user.stats) return { isEarned: false, current: 0 };
 
-  // example supported criteria:
-  // { completedDeals: 10 }
-  // { totalVolume: 1000000 }
+  const stats = user.stats;
+  let current = 0;
+  let target = criteria.target || 1;
+  let isEarned = false;
 
   if (criteria.completedDeals) {
-    return stats.stats.completedDeals >= criteria.completedDeals;
+    current = stats.completedDeals || 0;
+    target = criteria.completedDeals;
+    isEarned = current >= target;
+  } else if (criteria.totalVolume) {
+    current = stats.totalVolume || 0;
+    target = criteria.totalVolume;
+    isEarned = current >= target;
+  } else if (criteria.averageRating) {
+    current = stats.averageRating || 0;
+    target = criteria.averageRating;
+    isEarned = current >= target;
   }
 
-  if (criteria.totalVolume) {
-    return stats.stats.totalVolume >= criteria.totalVolume;
-  }
-
-  if (criteria.averageRating) {
-    return stats.stats.averageRating >= criteria.averageRating;
-  }
-
-  return false;
+  return { isEarned, current, target };
 };
 
 export const updateBadgesForUser = async (userId: Types.ObjectId) => {
@@ -39,10 +42,8 @@ export const updateBadgesForUser = async (userId: Types.ObjectId) => {
   for (const badge of badges) {
     const already = await UserBadge.findOne({ userId, badgeId: badge.badgeId });
 
-    const target = badge.criteria?.target || 1;
-    const current = 0;
-
-    const isEarned = await badgeCriteriaCheck(userId, badge.criteria);
+    const { isEarned, current, target } = await badgeCriteriaCheck(userId, badge.criteria);
+    const percentage = Math.min(100, Math.floor((current / target) * 100));
 
     if (!already) {
       await UserBadge.create({
@@ -51,7 +52,7 @@ export const updateBadgesForUser = async (userId: Types.ObjectId) => {
         progress: {
           current,
           target,
-          percentage: isEarned ? 100 : 0,
+          percentage,
         },
         isEarned,
         earnedAt: isEarned ? new Date() : null,
@@ -69,8 +70,9 @@ export const updateBadgesForUser = async (userId: Types.ObjectId) => {
           $set: {
             isEarned,
             earnedAt: isEarned ? already.earnedAt || new Date() : null,
+            "progress.current": current,
             "progress.target": target,
-            "progress.percentage": isEarned ? 100 : already.progress.percentage,
+            "progress.percentage": percentage,
           },
         }
       );

@@ -139,6 +139,7 @@ export const releaseEscrowService = async (
 
   const session = await mongoose.startSession();
   session.startTransaction();
+  let transactionCommitted = false;
 
   try {
     escrow.status = "RELEASED";
@@ -156,6 +157,7 @@ export const releaseEscrowService = async (
     await deal.save({ session });
 
     await session.commitTransaction();
+    transactionCommitted = true;
     session.endSession();
 
     // ✅ Stats update AFTER commit
@@ -173,7 +175,9 @@ export const releaseEscrowService = async (
       transferId: transfer.id,
     };
   } catch (error) {
-    await session.abortTransaction();
+    if (!transactionCommitted) {
+      await session.abortTransaction();
+    }
     session.endSession();
     throw error;
   }
@@ -213,6 +217,7 @@ export const refundEscrowService = async (
 
   const session = await mongoose.startSession();
   session.startTransaction();
+  let transactionCommitted = false;
 
   try {
     escrow.status = "REFUNDED";
@@ -230,6 +235,7 @@ export const refundEscrowService = async (
     await deal.save({ session });
 
     await session.commitTransaction();
+    transactionCommitted = true;
     session.endSession();
 
     await handleDealCancelled({
@@ -246,7 +252,9 @@ export const refundEscrowService = async (
       refundId: refund.id,
     };
   } catch (error) {
-    await session.abortTransaction();
+    if (!transactionCommitted) {
+      await session.abortTransaction();
+    }
     session.endSession();
     throw error;
   }

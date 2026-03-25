@@ -7,7 +7,14 @@ const param = (v: string | string[]) => (Array.isArray(v) ? v[0] : v);
 
 export const requestAdController = async (req: any, res: Response, next: NextFunction) => {
   try {
-    const ad = await AdServices.requestAdService({ advertiserId: req.user._id, payload: req.body });
+    const payload = { ...req.body };
+
+    if (req.file) {
+      payload.mediaUrl = req.file.path;
+      payload.mediaType = req.file.mimetype.startsWith("video/") ? "video" : "image";
+    }
+
+    const ad = await AdServices.requestAdService({ advertiserId: req.user._id, payload });
     return sendResponse(res, 201, true, SUCCESS_MESSAGES[SuccessCode.AD_REQUESTED], ad, undefined, SuccessCode.AD_REQUESTED);
   } catch (error) {
     next(error);
@@ -34,7 +41,7 @@ export const getActiveAdsController = async (req: Request, res: Response, next: 
 
 export const getAdByIdController = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { adId } = req.params;
+    const  adId  = req.params.adId as string;
     if (!mongoose.Types.ObjectId.isValid(adId)) {
       throw new CustomError("Invalid ad id", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
     }

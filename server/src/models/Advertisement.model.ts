@@ -27,6 +27,8 @@ export interface IAdvertisement extends Document {
   startDate?: Date;
   endDate?: Date;
 
+  clicks: number;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -111,6 +113,10 @@ const AdvertisementSchema = new Schema<IAdvertisement>(
     endDate: {
       type: Date,
       default: null,
+    },
+    clicks: {
+      type: Number,
+      default: 0,
     },
   },
   {

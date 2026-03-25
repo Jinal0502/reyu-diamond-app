@@ -2,12 +2,18 @@ import express from "express";
 import * as AdController from "../controllers/advertisement.controller";
 import { protect } from "../middlewares/auth.middleware";
 import { permit } from "../middlewares/permission.middleware";
+import { adsUpload } from "../middlewares/upload.middleware";
 
 const router = express.Router();
 
 /* USER */
 
-router.post("/request", protect, AdController.requestAdController);
+router.post(
+  "/request",
+  protect,
+  adsUpload.single("media"),
+  AdController.requestAdController
+);
 
 router.get("/my-ads", protect, AdController.getMyAdsController);
 

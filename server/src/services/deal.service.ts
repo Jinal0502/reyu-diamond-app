@@ -236,6 +236,7 @@ export const cancelDealService = async (
 ) => {
   const session = await mongoose.startSession();
   session.startTransaction();
+  let transactionCommitted = false;
 
   try {
     const deal = await Deal.findById(dealId).session(session);
@@ -259,6 +260,7 @@ export const cancelDealService = async (
     // if payment already held => refund must happen
     if (escrow && escrow.status === "HELD") {
       await session.commitTransaction();
+      transactionCommitted = true;
       session.endSession();
 
       // refund service uses its own transaction
@@ -284,6 +286,7 @@ export const cancelDealService = async (
     await deal.save({ session });
 
     await session.commitTransaction();
+    transactionCommitted = true;
     session.endSession();
 
     await handleDealCancelled({
@@ -302,7 +305,9 @@ export const cancelDealService = async (
       escrow,
     };
   } catch (error) {
-    await session.abortTransaction();
+    if (!transactionCommitted) {
+      await session.abortTransaction();
+    }
     session.endSession();
     throw error;
   }

@@ -37,7 +37,7 @@ export const requestAdService = async ({
     mediaUrl,
     mediaType,
     ctaLink,
-    bannerSection,
+    bannerSection: Array.isArray(bannerSection) ? bannerSection : (bannerSection ? [bannerSection] : ["BANNER_ZONES"]),
     startDate,
     endDate,
     status: "PENDING",
@@ -71,7 +71,7 @@ export const getActiveAdsService = async (section?: string) => {
   };
 
   if (section) {
-    filter.bannerSection = section;
+    filter.bannerSection = { $in: [section] };
   }
 
   const ads = await Advertisement.find(filter).sort({
@@ -176,6 +176,9 @@ export const clickAdService = async ({
     throw new CustomError("Redirect link missing", HTTP_STATUS.BAD_REQUEST, ErrorCode.VALIDATION_ERROR);
   }
 
+  // Increment click count
+  await Advertisement.findByIdAndUpdate(adId, { $inc: { clicks: 1 } });
+
   logger.info("Ad click redirect", { adId, currentUserId });
   return ad.ctaLink;
-};
+};
