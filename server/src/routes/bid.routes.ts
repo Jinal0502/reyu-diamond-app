@@ -3,14 +3,15 @@ import * as BidController from "../controllers/bid.controller";
 import { protect } from "../middlewares/auth.middleware";
 import { ownerOrRole } from "../middlewares/permission.middleware";
 import { Auction } from "../models/Auction.model";
+import { bidLimiter } from "../middlewares/rateLimit.middleware";
 
 const router = Router();
 
 // Buyer creates bid
-router.post("/", BidController.createBid);
+router.post("/", bidLimiter, BidController.createBid);
 
 // Seller/Admin updates bid status
-router.patch("/:bidId/status", BidController.updateBidStatus);
+router.patch("/:bidId/status", bidLimiter, BidController.updateBidStatus);
 
 // Seller/Admin can see all bids in auction
 router.get(

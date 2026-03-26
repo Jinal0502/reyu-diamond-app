@@ -26,6 +26,7 @@ export interface IUser extends Document {
 
   isEmailVerified: boolean;
   isKycVerified: boolean;
+  isBlocked: boolean;
 
   stripeAccountId?: string;
   fcmTokens?: string[];
@@ -94,6 +95,10 @@ const userSchema: Schema<IUser> = new Schema(
     },
 
     isKycVerified: {
+      type: Boolean,
+      default: false,
+    },
+    isBlocked: {
       type: Boolean,
       default: false,
     },

@@ -20,7 +20,7 @@ router.post("/resend-otp" ,  authLimiter ,validate(resendOtpSchema) , AuthContro
 router.post("/login" , authLimiter ,validate(loginSchema) , AuthController.login);
 
 router.post("/forgot-password" , authLimiter, validate(forgotPasswordSchema) , AuthController.forgotPassword);
-router.post("/reset-password" , validate(resetPasswordSchema) , AuthController.resetPassword);
+router.post("/reset-password" , authLimiter, validate(resetPasswordSchema) , AuthController.resetPassword);
 router.post("/logout" , protect , AuthController.logout);
 
 export default router;

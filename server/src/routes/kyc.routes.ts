@@ -21,13 +21,13 @@ router.post(
   KycController.submitKyc
 );
 
-router.get("/",  permit("admin"), validate(getKycsSchema) ,KycController.getKycs);
+// router.get("/",  permit("admin"), validate(getKycsSchema) ,KycController.getKycs);
 
-router.put(
-  "/:id/verify-kyc",
-  permit("admin"),
-  validate(verifyKycSchema),
-  KycController.verifyKyc
-);
+// router.put(
+//   "/:id/verify-kyc",
+//   permit("admin"),
+//   validate(verifyKycSchema),
+//   KycController.verifyKyc
+// );
 
 export default router;

@@ -5,6 +5,7 @@ import { ownerOrRole} from "../middlewares/permission.middleware";
 import { Inventory } from "../models/Inventory.model";
 import { kycVerifiedOnly } from "../middlewares/kyc.middleware";
 import { inventoryUpload } from "../middlewares/inventoryUpload.middleware";
+import { inventoryLimiter } from "../middlewares/rateLimit.middleware";
 
 const router = Router();
 
@@ -21,6 +22,7 @@ router.get(
 router.post(
   "/",
   protect,
+  inventoryLimiter,
   kycVerifiedOnly,
   InventoryController.createInventoryItem
 );
@@ -28,6 +30,7 @@ router.post(
 router.put(
   "/:inventoryId",
   protect,
+  inventoryLimiter,
   kycVerifiedOnly,
   ownerOrRole(Inventory , "sellerId" , [] , "inventoryId"),
   InventoryController.updateInventoryItem
@@ -36,6 +39,7 @@ router.put(
 router.delete(
   "/:inventoryId",
   protect,
+  inventoryLimiter,
   kycVerifiedOnly,
   ownerOrRole(Inventory , "sellerId" , [] , "inventoryId"),
   InventoryController.deleteInventoryItem
@@ -44,6 +48,7 @@ router.delete(
 router.post(
   "/:inventoryId/media",
   protect,
+  inventoryLimiter,
   kycVerifiedOnly,
   ownerOrRole(Inventory , "sellerId" , [] , "inventoryId"),
   inventoryUpload.array("media" , 6),
@@ -53,6 +58,7 @@ router.post(
 router.put(
   "/:inventoryId/media",
   protect,
+  inventoryLimiter,
   kycVerifiedOnly,
   ownerOrRole(Inventory , "sellerId" , [] , "inventoryId"),
   inventoryUpload.array("media" , 5),
@@ -62,6 +68,7 @@ router.put(
 router.delete(
   "/:inventoryId/media",
   protect,
+  inventoryLimiter,
   kycVerifiedOnly,
   ownerOrRole(Inventory , "sellerId" , [] , "inventoryId"),
   InventoryController.removeInventoryMedia

@@ -118,15 +118,15 @@ export const sendMessageService = async ({
   // 🔥 Notifications
   const sender = await User.findById(senderId).select("name").lean();
   const senderName = sender?.name || "Someone";
-  
+
   const recipientId = updateResult.participantIds.find(id => id.toString() !== senderId.toString());
-  
+
   if (recipientId) {
     NotificationEvents.notifyChatMessage(
-        recipientId.toString(), 
-        senderName, 
-        text, 
-        conversationId
+      recipientId.toString(),
+      senderName,
+      text,
+      conversationId
     );
   }
 
@@ -253,4 +253,3 @@ export const markConversationAsReadService = async ({
 
   return true;
 };
-

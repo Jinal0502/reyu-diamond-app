@@ -19,7 +19,9 @@ import ratingRoutes from "../routes/rating.routes";
 import badgeRoutes from "../routes/badge.routes";
 import adRoutes from "../routes/advertisement.routes";
 import notificationRoutes from "../routes/notification.routes";
+import adminRoutes from "../routes/admin.routes";
 import { protect } from "../middlewares/auth.middleware";
+import { permit } from "../middlewares/permission.middleware";
 import {kycVerifiedOnly} from "../middlewares/kyc.middleware";
 
 
@@ -41,5 +43,6 @@ router.use("/ratings" , ratingRoutes);
 router.use("/badges" , badgeRoutes);
 router.use("/ads" , adRoutes);
 router.use("/notifications" , notificationRoutes);
+router.use("/admin", protect, permit("admin"), adminRoutes);
 
 export default router;

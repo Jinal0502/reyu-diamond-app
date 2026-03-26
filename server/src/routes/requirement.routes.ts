@@ -5,6 +5,7 @@ import { Requirement } from "../models/Requirement.model";
 import { kycVerifiedOnly } from "../middlewares/kyc.middleware";
 import { validate } from "../middlewares/validation.middleware";
 import { createRequirementSchema, deleteRequirementSchema, getRequirementByIdSchema, updateRequirementSchema } from "../validators/requirement.validator";
+import { requirementLimiter } from "../middlewares/rateLimit.middleware";
 
 const router = Router();
 
@@ -21,6 +22,7 @@ router.get(
 );
 router.post(
   "/",
+  requirementLimiter,
   kycVerifiedOnly,
   validate(createRequirementSchema),
   RequirementController.createRequirement
@@ -28,6 +30,7 @@ router.post(
 
 router.patch(
   "/:requirementId",
+  requirementLimiter,
   kycVerifiedOnly,
   validate(updateRequirementSchema),
   ownerOrRole(Requirement, "userId", [] , "requirementId"),
@@ -37,6 +40,7 @@ router.patch(
 
 router.delete(
   "/:requirementId",
+  requirementLimiter,
   kycVerifiedOnly,
   validate(deleteRequirementSchema),
   ownerOrRole(Requirement, "userId", [] , "requirementId"), 

@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 import http from "http";
 import helmet from "helmet";
 import { Server } from "socket.io";
-import { setupSocket } from "./socket/socket";
+import setupSocket from "./socket/socket";
 import { apiLimiter } from "./middlewares/rateLimit.middleware";
 import connectDB from "./config/db.js";
 import cors, { CorsOptions } from "cors";
